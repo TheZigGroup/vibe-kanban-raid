@@ -90,6 +90,11 @@ import {
   ReviewError,
   CreateProjectRequirements,
   ProjectRequirementsStatus,
+  AgentActivityStatus,
+  AgentTriggerResponse,
+  ReviewAutomationStatus,
+  ReviewAutomationLog,
+  ReviewAutomationSettingsResponse,
 } from 'shared/types';
 import type { WorkspaceWithSession } from '@/types/attempt';
 import { createWorkspaceWithSession } from '@/types/attempt';
@@ -1390,5 +1395,118 @@ export const requirementsApi = {
       }
     );
     return handleApiResponse<void>(response);
+  },
+};
+
+// Agent Activity API response type for enable/disable
+export interface AgentActivitySettingsResponse {
+  enabled: boolean;
+  interval_seconds: number;
+}
+
+// Agent Activity API for autonomous task selection
+export const agentActivityApi = {
+  /**
+   * Enable agent activity for a project
+   */
+  enable: async (projectId: string): Promise<AgentActivitySettingsResponse> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/agent-activity/enable`,
+      {
+        method: 'POST',
+      }
+    );
+    return handleApiResponse<AgentActivitySettingsResponse>(response);
+  },
+
+  /**
+   * Disable agent activity for a project
+   */
+  disable: async (
+    projectId: string
+  ): Promise<AgentActivitySettingsResponse> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/agent-activity/disable`,
+      {
+        method: 'POST',
+      }
+    );
+    return handleApiResponse<AgentActivitySettingsResponse>(response);
+  },
+
+  /**
+   * Get the current status of agent activity for a project
+   */
+  getStatus: async (projectId: string): Promise<AgentActivityStatus> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/agent-activity/status`
+    );
+    return handleApiResponse<AgentActivityStatus>(response);
+  },
+
+  /**
+   * Manually trigger agent activity to select next task
+   */
+  trigger: async (projectId: string): Promise<AgentTriggerResponse> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/agent-activity/trigger`,
+      {
+        method: 'POST',
+      }
+    );
+    return handleApiResponse<AgentTriggerResponse>(response);
+  },
+};
+
+// Review Automation API for automatic testing and merging
+export const reviewAutomationApi = {
+  /**
+   * Enable review automation for a project
+   */
+  enable: async (
+    projectId: string
+  ): Promise<ReviewAutomationSettingsResponse> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/review-automation/enable`,
+      {
+        method: 'POST',
+      }
+    );
+    return handleApiResponse<ReviewAutomationSettingsResponse>(response);
+  },
+
+  /**
+   * Disable review automation for a project
+   */
+  disable: async (
+    projectId: string
+  ): Promise<ReviewAutomationSettingsResponse> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/review-automation/disable`,
+      {
+        method: 'POST',
+      }
+    );
+    return handleApiResponse<ReviewAutomationSettingsResponse>(response);
+  },
+
+  /**
+   * Get the current status of review automation for a project
+   */
+  getStatus: async (projectId: string): Promise<ReviewAutomationStatus> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/review-automation/status`
+    );
+    return handleApiResponse<ReviewAutomationStatus>(response);
+  },
+
+  /**
+   * Get recent review automation logs for a project
+   */
+  getLogs: async (projectId: string): Promise<ReviewAutomationLog[]> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/review-automation/logs`
+    );
+    return handleApiResponse<ReviewAutomationLog[]>(response);
   },
 };

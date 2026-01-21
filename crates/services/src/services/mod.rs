@@ -1,3 +1,4 @@
+pub mod agent_activity;
 pub mod analytics;
 pub mod approvals;
 pub mod auth;
@@ -23,5 +24,6 @@ pub mod queued_message;
 pub mod remote_client;
 pub mod repo;
 pub mod requirements_analyzer;
+pub mod review_automation;
 pub mod workspace_manager;
 pub mod worktree_manager;

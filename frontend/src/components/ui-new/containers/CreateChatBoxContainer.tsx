@@ -186,6 +186,7 @@ export function CreateChatBoxContainer() {
         source: null,
         layer: null,
         sequence: null,
+        testing_criteria: null,
       },
       executor_profile_id: effectiveProfile,
       repos: repos.map((r) => ({

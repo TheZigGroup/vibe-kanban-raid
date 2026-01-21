@@ -58,6 +58,7 @@ pub struct Task {
     pub source: TaskSource,
     pub layer: Option<TaskLayer>,
     pub sequence: Option<i32>,
+    pub testing_criteria: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -103,6 +104,7 @@ pub struct CreateTask {
     pub source: Option<TaskSource>,
     pub layer: Option<TaskLayer>,
     pub sequence: Option<i32>,
+    pub testing_criteria: Option<String>,
 }
 
 impl CreateTask {
@@ -121,6 +123,7 @@ impl CreateTask {
             source: None,
             layer: None,
             sequence: None,
+            testing_criteria: None,
         }
     }
 
@@ -131,6 +134,7 @@ impl CreateTask {
         description: Option<String>,
         layer: Option<TaskLayer>,
         sequence: i32,
+        testing_criteria: Option<String>,
     ) -> Self {
         Self {
             project_id,
@@ -142,6 +146,7 @@ impl CreateTask {
             source: Some(TaskSource::AiGenerated),
             layer,
             sequence: Some(sequence),
+            testing_criteria,
         }
     }
 }
@@ -183,6 +188,7 @@ impl Task {
   t.source                        AS "source!: TaskSource",
   t.layer                         AS "layer: TaskLayer",
   t.sequence                      AS "sequence: i32",
+  t.testing_criteria,
   t.created_at                    AS "created_at!: DateTime<Utc>",
   t.updated_at                    AS "updated_at!: DateTime<Utc>",
 
@@ -238,6 +244,7 @@ ORDER BY t.created_at DESC"#,
                     source: rec.source,
                     layer: rec.layer,
                     sequence: rec.sequence,
+                    testing_criteria: rec.testing_criteria,
                     created_at: rec.created_at,
                     updated_at: rec.updated_at,
                 },
@@ -253,7 +260,7 @@ ORDER BY t.created_at DESC"#,
     pub async fn find_by_id(pool: &SqlitePool, id: Uuid) -> Result<Option<Self>, sqlx::Error> {
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE id = $1"#,
             id
@@ -265,7 +272,7 @@ ORDER BY t.created_at DESC"#,
     pub async fn find_by_rowid(pool: &SqlitePool, rowid: i64) -> Result<Option<Self>, sqlx::Error> {
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE rowid = $1"#,
             rowid
@@ -283,9 +290,9 @@ ORDER BY t.created_at DESC"#,
         let source = data.source.clone().unwrap_or_default();
         sqlx::query_as!(
             Task,
-            r#"INSERT INTO tasks (id, project_id, title, description, status, parent_workspace_id, source, layer, sequence)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
+            r#"INSERT INTO tasks (id, project_id, title, description, status, parent_workspace_id, source, layer, sequence, testing_criteria)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
             task_id,
             data.project_id,
             data.title,
@@ -294,7 +301,8 @@ ORDER BY t.created_at DESC"#,
             data.parent_workspace_id,
             source,
             data.layer,
-            data.sequence
+            data.sequence,
+            data.testing_criteria
         )
         .fetch_one(pool)
         .await
@@ -314,7 +322,7 @@ ORDER BY t.created_at DESC"#,
             r#"UPDATE tasks
                SET title = $3, description = $4, status = $5, parent_workspace_id = $6
                WHERE id = $1 AND project_id = $2
-               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
+               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
             id,
             project_id,
             title,
@@ -392,7 +400,7 @@ ORDER BY t.created_at DESC"#,
         // Find only child tasks that have this workspace as their parent
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE parent_workspace_id = $1
                ORDER BY created_at DESC"#,
@@ -434,5 +442,106 @@ ORDER BY t.created_at DESC"#,
             current_workspace: workspace.clone(),
             children,
         })
+    }
+
+    /// Find tasks in "inreview" status that have completed attempts (no running processes).
+    /// Returns (task, workspace) pairs for each eligible task.
+    pub async fn find_in_review_with_completed_attempts(
+        pool: &SqlitePool,
+        project_id: Uuid,
+    ) -> Result<Vec<(Task, Workspace)>, sqlx::Error> {
+        // Find tasks in review status that:
+        // 1. Have at least one workspace
+        // 2. Have no currently running execution processes
+        // 3. Have at least one completed execution process (to ensure work was done)
+        let records = sqlx::query!(
+            r#"SELECT
+                t.id as "task_id!: Uuid",
+                t.project_id as "task_project_id!: Uuid",
+                t.title as "task_title!",
+                t.description as "task_description",
+                t.status as "task_status!: TaskStatus",
+                t.parent_workspace_id as "task_parent_workspace_id: Uuid",
+                t.source as "task_source!: TaskSource",
+                t.layer as "task_layer: TaskLayer",
+                t.sequence as "task_sequence: i32",
+                t.testing_criteria as "task_testing_criteria",
+                t.created_at as "task_created_at!: DateTime<Utc>",
+                t.updated_at as "task_updated_at!: DateTime<Utc>",
+                w.id as "workspace_id!: Uuid",
+                w.task_id as "workspace_task_id!: Uuid",
+                w.container_ref as "workspace_container_ref",
+                w.branch as "workspace_branch!",
+                w.agent_working_dir as "workspace_agent_working_dir",
+                w.setup_completed_at as "workspace_setup_completed_at: DateTime<Utc>",
+                w.created_at as "workspace_created_at!: DateTime<Utc>",
+                w.updated_at as "workspace_updated_at!: DateTime<Utc>",
+                w.archived as "workspace_archived!: bool",
+                w.pinned as "workspace_pinned!: bool",
+                w.name as "workspace_name"
+            FROM tasks t
+            JOIN workspaces w ON w.task_id = t.id
+            WHERE t.project_id = $1
+              AND t.status = 'inreview'
+              AND w.archived = 0
+              -- Has at least one completed execution process (codingagent)
+              AND EXISTS (
+                  SELECT 1
+                  FROM sessions s
+                  JOIN execution_processes ep ON ep.session_id = s.id
+                  WHERE s.workspace_id = w.id
+                    AND ep.run_reason = 'codingagent'
+                    AND ep.status IN ('completed', 'failed', 'killed')
+              )
+              -- No running execution processes
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM sessions s
+                  JOIN execution_processes ep ON ep.session_id = s.id
+                  WHERE s.workspace_id = w.id
+                    AND ep.status = 'running'
+              )
+            ORDER BY t.created_at ASC
+            LIMIT 1"#,
+            project_id
+        )
+        .fetch_all(pool)
+        .await?;
+
+        let result = records
+            .into_iter()
+            .map(|rec| {
+                let task = Task {
+                    id: rec.task_id,
+                    project_id: rec.task_project_id,
+                    title: rec.task_title,
+                    description: rec.task_description,
+                    status: rec.task_status,
+                    parent_workspace_id: rec.task_parent_workspace_id,
+                    source: rec.task_source,
+                    layer: rec.task_layer,
+                    sequence: rec.task_sequence,
+                    testing_criteria: rec.task_testing_criteria,
+                    created_at: rec.task_created_at,
+                    updated_at: rec.task_updated_at,
+                };
+                let workspace = Workspace {
+                    id: rec.workspace_id,
+                    task_id: rec.workspace_task_id,
+                    container_ref: rec.workspace_container_ref,
+                    branch: rec.workspace_branch,
+                    agent_working_dir: rec.workspace_agent_working_dir,
+                    setup_completed_at: rec.workspace_setup_completed_at,
+                    created_at: rec.workspace_created_at,
+                    updated_at: rec.workspace_updated_at,
+                    archived: rec.workspace_archived,
+                    pinned: rec.workspace_pinned,
+                    name: rec.workspace_name,
+                };
+                (task, workspace)
+            })
+            .collect();
+
+        Ok(result)
     }
 }

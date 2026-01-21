@@ -6,6 +6,7 @@ use tower_http::validate_request::ValidateRequestHeaderLayer;
 
 use crate::{DeploymentImpl, middleware};
 
+pub mod agent_activity;
 pub mod approvals;
 pub mod config;
 pub mod containers;
@@ -21,6 +22,7 @@ pub mod organizations;
 pub mod projects;
 pub mod repo;
 pub mod requirements;
+pub mod review_automation;
 pub mod scratch;
 pub mod sessions;
 pub mod tags;
@@ -44,6 +46,8 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(filesystem::router())
         .merge(repo::router())
         .merge(requirements::router(&deployment))
+        .merge(agent_activity::router(&deployment))
+        .merge(review_automation::router(&deployment))
         .merge(events::router(&deployment))
         .merge(approvals::router())
         .merge(scratch::router(&deployment))

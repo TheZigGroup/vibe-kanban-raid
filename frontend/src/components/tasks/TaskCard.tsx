@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { KanbanCard } from '@/components/ui/shadcn-io/kanban';
-import { Link, Loader2, XCircle } from 'lucide-react';
+import { Link, Loader2, XCircle, ClipboardCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import type { TaskWithAttemptStatus } from 'shared/types';
 import { ActionsDropdown } from '@/components/ui/actions-dropdown';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ export function TaskCard({
   const { t } = useTranslation('tasks');
   const navigate = useNavigateWithSearch();
   const [isNavigatingToParent, setIsNavigatingToParent] = useState(false);
+  const [showTestingCriteria, setShowTestingCriteria] = useState(false);
 
   const handleClick = useCallback(() => {
     onViewDetails(task);
@@ -118,6 +119,33 @@ export function TaskCard({
               ? `${task.description.substring(0, 130)}...`
               : task.description}
           </p>
+        )}
+        {task.testing_criteria && (
+          <div className="mt-2 border-t pt-2">
+            <button
+              type="button"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowTestingCriteria(!showTestingCriteria);
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <ClipboardCheck className="h-3 w-3" />
+              <span>Testing Criteria</span>
+              {showTestingCriteria ? (
+                <ChevronUp className="h-3 w-3" />
+              ) : (
+                <ChevronDown className="h-3 w-3" />
+              )}
+            </button>
+            {showTestingCriteria && (
+              <p className="mt-1 text-xs text-muted-foreground break-words whitespace-pre-wrap">
+                {task.testing_criteria}
+              </p>
+            )}
+          </div>
         )}
       </div>
     </KanbanCard>

@@ -1,3 +1,4 @@
+pub mod agent_activity;
 pub mod coding_agent_turn;
 pub mod execution_process;
 pub mod execution_process_logs;
@@ -8,6 +9,7 @@ pub mod project;
 pub mod project_repo;
 pub mod project_requirements;
 pub mod repo;
+pub mod review_automation;
 pub mod scratch;
 pub mod session;
 pub mod tag;

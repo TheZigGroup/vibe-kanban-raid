@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO project_review_settings (id, project_id, enabled, auto_merge_enabled, run_tests_enabled)\n            VALUES ($1, $2, $3, $4, $5)\n            ON CONFLICT(project_id) DO UPDATE SET\n                enabled = excluded.enabled,\n                auto_merge_enabled = excluded.auto_merge_enabled,\n                run_tests_enabled = excluded.run_tests_enabled,\n                updated_at = datetime('now', 'subsec')\n            RETURNING\n                id as \"id!: Uuid\",\n                project_id as \"project_id!: Uuid\",\n                enabled as \"enabled!: bool\",\n                auto_merge_enabled as \"auto_merge_enabled!: bool\",\n                run_tests_enabled as \"run_tests_enabled!: bool\",\n                created_at as \"created_at!: DateTime<Utc>\",\n                updated_at as \"updated_at!: DateTime<Utc>\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "project_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "enabled!: bool",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "auto_merge_enabled!: bool",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "run_tests_enabled!: bool",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "476801af44436ce007888360d52dd865183b63609342e3ca3e8ac4f8fa2fdf81"
+}

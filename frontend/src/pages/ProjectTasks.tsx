@@ -67,6 +67,9 @@ import {
 } from '@/components/ui/breadcrumb';
 import { AttemptHeaderActions } from '@/components/panels/AttemptHeaderActions';
 import { TaskPanelHeaderActions } from '@/components/panels/TaskPanelHeaderActions';
+import { ProjectRequirementsSection } from '@/components/projects/ProjectRequirementsSection';
+import { AgentActivityToggle } from '@/components/projects/AgentActivityToggle';
+import { ReviewAutomationToggle } from '@/components/projects/ReviewAutomationToggle';
 
 import type { TaskWithAttemptStatus, TaskStatus } from 'shared/types';
 
@@ -143,6 +146,7 @@ export function ProjectTasks() {
 
   const {
     projectId,
+    project,
     isLoading: projectLoading,
     error: projectError,
   } = useProject();
@@ -756,10 +760,18 @@ export function ProjectTasks() {
         <Card>
           <CardContent className="text-center py-8">
             <p className="text-muted-foreground">{t('empty.noTasks')}</p>
-            <Button className="mt-4" onClick={handleCreateNewTask}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t('empty.createFirst')}
-            </Button>
+            <div className="flex items-center justify-center gap-3 mt-4">
+              <Button onClick={handleCreateNewTask}>
+                <Plus className="h-4 w-4 mr-2" />
+                {t('empty.createFirst')}
+              </Button>
+              {projectId && project && (
+                <ProjectRequirementsSection
+                  projectId={projectId}
+                  projectName={project.name}
+                />
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -774,15 +786,29 @@ export function ProjectTasks() {
         </Card>
       </div>
     ) : (
-      <div className="w-full h-full overflow-x-auto overflow-y-auto overscroll-x-contain">
-        <TaskKanbanBoard
-          columns={kanbanColumns}
-          onDragEnd={handleDragEnd}
-          onViewTaskDetails={handleViewTaskDetails}
-          selectedTaskId={selectedTask?.id}
-          onCreateTask={handleCreateNewTask}
-          projectId={projectId!}
-        />
+      <div className="w-full h-full flex flex-col overflow-hidden">
+        {projectId && project && (
+          <div className="shrink-0 px-4 py-2 flex justify-between items-center border-b">
+            <div className="flex items-center gap-4">
+              <AgentActivityToggle projectId={projectId} />
+              <ReviewAutomationToggle projectId={projectId} />
+            </div>
+            <ProjectRequirementsSection
+              projectId={projectId}
+              projectName={project.name}
+            />
+          </div>
+        )}
+        <div className="flex-1 overflow-x-auto overflow-y-auto overscroll-x-contain">
+          <TaskKanbanBoard
+            columns={kanbanColumns}
+            onDragEnd={handleDragEnd}
+            onViewTaskDetails={handleViewTaskDetails}
+            selectedTaskId={selectedTask?.id}
+            onCreateTask={handleCreateNewTask}
+            projectId={projectId!}
+          />
+        </div>
       </div>
     );
 

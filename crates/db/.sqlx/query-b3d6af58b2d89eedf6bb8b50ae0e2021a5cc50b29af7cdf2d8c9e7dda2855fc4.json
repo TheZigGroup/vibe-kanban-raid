@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                ral.id as \"id!: Uuid\",\n                ral.task_id as \"task_id!: Uuid\",\n                ral.workspace_id as \"workspace_id!: Uuid\",\n                ral.action as \"action!: ReviewAction\",\n                ral.output,\n                ral.error_message,\n                ral.created_at as \"created_at!: DateTime<Utc>\"\n            FROM review_automation_logs ral\n            JOIN tasks t ON ral.task_id = t.id\n            WHERE t.project_id = $1\n            ORDER BY ral.created_at DESC\n            LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "task_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "workspace_id!: Uuid",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "action!: ReviewAction",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "output",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "error_message",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "b3d6af58b2d89eedf6bb8b50ae0e2021a5cc50b29af7cdf2d8c9e7dda2855fc4"
+}

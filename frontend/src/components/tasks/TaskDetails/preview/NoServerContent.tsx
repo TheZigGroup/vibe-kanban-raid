@@ -73,6 +73,7 @@ export function NoServerContent({
         source: null,
         layer: null,
         sequence: null,
+        testing_criteria: null,
       },
       executor_profile_id: config.executor_profile,
       repos,

@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO review_automation_logs (id, task_id, workspace_id, action, output, error_message)\n            VALUES ($1, $2, $3, $4, $5, $6)\n            RETURNING\n                id as \"id!: Uuid\",\n                task_id as \"task_id!: Uuid\",\n                workspace_id as \"workspace_id!: Uuid\",\n                action as \"action!: ReviewAction\",\n                output,\n                error_message,\n                created_at as \"created_at!: DateTime<Utc>\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "task_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "workspace_id!: Uuid",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "action!: ReviewAction",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "output",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "error_message",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "243f74c65dd6e1be94872bc230597b0afff08e412aaa0d0b400cd45a1861ae40"
+}

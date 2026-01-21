@@ -5,6 +5,7 @@ use db::DBService;
 use deployment::{Deployment, DeploymentError, RemoteClientNotConfigured};
 use executors::profile::ExecutorConfigs;
 use services::services::{
+    agent_activity::{AgentActivityService, AutoAttemptConfig},
     analytics::{AnalyticsConfig, AnalyticsContext, AnalyticsService, generate_user_id},
     approvals::Approvals,
     auth::AuthContext,
@@ -20,6 +21,7 @@ use services::services::{
     queued_message::QueuedMessageService,
     remote_client::{RemoteClient, RemoteClientError},
     repo::RepoService,
+    review_automation::ReviewAutomationService,
     worktree_manager::WorktreeManager,
 };
 use tokio::sync::RwLock;
@@ -270,6 +272,28 @@ impl Deployment for LocalDeployment {
 
     fn auth_context(&self) -> &AuthContext {
         &self.auth_context
+    }
+
+    async fn spawn_agent_activity_service(&self) -> tokio::task::JoinHandle<()> {
+        let db = self.db.clone();
+        let notification_service = self.container.notification_service().clone();
+
+        // Create auto-attempt config with all necessary services
+        let auto_attempt = AutoAttemptConfig {
+            git_service: self.git.clone(),
+            config: self.config.clone(),
+            workspace_starter: Arc::new(self.container.clone()),
+        };
+
+        AgentActivityService::spawn(db, notification_service, Some(auto_attempt)).await
+    }
+
+    async fn spawn_review_automation_service(&self) -> tokio::task::JoinHandle<()> {
+        let db = self.db.clone();
+        let git_service = self.git.clone();
+        let notification_service = self.container.notification_service().clone();
+
+        ReviewAutomationService::spawn(db, git_service, notification_service).await
     }
 }
 

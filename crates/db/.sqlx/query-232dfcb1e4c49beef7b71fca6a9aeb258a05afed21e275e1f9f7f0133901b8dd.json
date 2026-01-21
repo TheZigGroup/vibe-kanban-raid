@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                id as \"id!: Uuid\",\n                project_id as \"project_id!: Uuid\",\n                task_id as \"task_id: Uuid\",\n                action as \"action!: AgentAction\",\n                reasoning,\n                created_at as \"created_at!: DateTime<Utc>\"\n            FROM agent_activity_logs\n            WHERE project_id = $1\n            ORDER BY created_at DESC\n            LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "project_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "task_id: Uuid",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "action!: AgentAction",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "reasoning",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 5,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "232dfcb1e4c49beef7b71fca6a9aeb258a05afed21e275e1f9f7f0133901b8dd"
+}

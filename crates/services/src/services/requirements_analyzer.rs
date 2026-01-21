@@ -53,6 +53,7 @@ struct GeneratedTask {
     title: String,
     description: String,
     layer: Option<String>,
+    testing_criteria: Option<String>,
 }
 
 /// Service for analyzing requirements and generating tasks
@@ -295,6 +296,7 @@ Return ONLY valid JSON with this structure:
                     Some(task.description),
                     layer,
                     sequence,
+                    task.testing_criteria,
                 );
 
                 Task::create(&self.pool, &create_task, Uuid::new_v4()).await?;
@@ -325,6 +327,7 @@ Each task should be:
 - Small enough to complete in one focused session
 - Clear about what needs to be done
 - Assigned to the appropriate layer (data/backend/frontend/fullstack/devops/testing)
+- Include specific testing criteria that can verify the task is complete
 
 ## Output Format
 Return ONLY valid JSON:
@@ -334,7 +337,8 @@ Return ONLY valid JSON:
     {{
       "title": "Short task title",
       "description": "Detailed description of what to implement",
-      "layer": "backend|frontend|data|fullstack|devops|testing"
+      "layer": "backend|frontend|data|fullstack|devops|testing",
+      "testing_criteria": "Specific, verifiable criteria to confirm this task is complete. Include what to test, expected behavior, and edge cases to verify."
     }}
   ]
 }}
@@ -347,7 +351,7 @@ Return ONLY valid JSON:
 
         let system = Some(
             "You are a software engineer breaking down features into implementation tasks. \
-             Create practical, actionable tasks. Output valid JSON only."
+             Create practical, actionable tasks with clear testing criteria. Output valid JSON only."
                 .to_string(),
         );
 

@@ -14,6 +14,7 @@ use executors::{command::CommandBuildError, executors::ExecutorError};
 use git2::Error as Git2Error;
 use local_deployment::pty::PtyError;
 use services::services::{
+    agent_activity::AgentActivityError,
     config::{ConfigError, EditorOpenError},
     container::ContainerError,
     git::GitServiceError,
@@ -23,6 +24,7 @@ use services::services::{
     remote_client::RemoteClientError,
     repo::RepoError as RepoServiceError,
     requirements_analyzer::RequirementsAnalyzerError,
+    review_automation::ReviewAutomationError,
     worktree_manager::WorktreeError,
 };
 use thiserror::Error;
@@ -83,6 +85,10 @@ pub enum ApiError {
     Pty(#[from] PtyError),
     #[error(transparent)]
     RequirementsAnalyzer(#[from] RequirementsAnalyzerError),
+    #[error(transparent)]
+    AgentActivity(#[from] AgentActivityError),
+    #[error(transparent)]
+    ReviewAutomation(#[from] ReviewAutomationError),
 }
 
 impl From<&'static str> for ApiError {
@@ -202,6 +208,49 @@ impl IntoResponse for ApiError {
                 }
                 RequirementsAnalyzerError::Database(_) => {
                     (StatusCode::INTERNAL_SERVER_ERROR, "RequirementsAnalyzerError")
+                }
+            },
+            ApiError::AgentActivity(err) => match err {
+                AgentActivityError::NoTasksAvailable => {
+                    (StatusCode::OK, "AgentActivityError")
+                }
+                AgentActivityError::TaskAlreadyInProgress => {
+                    (StatusCode::CONFLICT, "AgentActivityError")
+                }
+                AgentActivityError::NotEnabled => {
+                    (StatusCode::BAD_REQUEST, "AgentActivityError")
+                }
+                AgentActivityError::ClaudeApi(_) => {
+                    (StatusCode::SERVICE_UNAVAILABLE, "AgentActivityError")
+                }
+                AgentActivityError::Database(_) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, "AgentActivityError")
+                }
+                AgentActivityError::WorkspaceCreation(_) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, "AgentActivityError")
+                }
+                AgentActivityError::NoRepositories => {
+                    (StatusCode::BAD_REQUEST, "AgentActivityError")
+                }
+            },
+            ApiError::ReviewAutomation(err) => match err {
+                ReviewAutomationError::MergeConflict(_) => {
+                    (StatusCode::CONFLICT, "ReviewAutomationError")
+                }
+                ReviewAutomationError::TestFailed(_) => {
+                    (StatusCode::UNPROCESSABLE_ENTITY, "ReviewAutomationError")
+                }
+                ReviewAutomationError::NoWorkspaceContainer => {
+                    (StatusCode::BAD_REQUEST, "ReviewAutomationError")
+                }
+                ReviewAutomationError::Database(_) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, "ReviewAutomationError")
+                }
+                ReviewAutomationError::Git(_) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, "ReviewAutomationError")
+                }
+                ReviewAutomationError::CommandFailed(_) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, "ReviewAutomationError")
                 }
             },
         };

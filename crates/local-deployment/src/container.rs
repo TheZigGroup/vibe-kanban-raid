@@ -41,6 +41,7 @@ use executors::{
 use futures::{FutureExt, TryStreamExt, stream::select};
 use serde_json::json;
 use services::services::{
+    agent_activity::WorkspaceStarter,
     analytics::AnalyticsContext,
     approvals::{Approvals, executor_approvals::ExecutorApprovalBridge},
     config::Config,
@@ -1405,6 +1406,26 @@ impl ContainerService for LocalContainerService {
         Ok(())
     }
 }
+
+#[async_trait]
+impl WorkspaceStarter for LocalContainerService {
+    async fn git_branch_from_workspace(&self, workspace_id: &Uuid, task_title: &str) -> String {
+        // Delegate to ContainerService's default implementation
+        ContainerService::git_branch_from_workspace(self, workspace_id, task_title).await
+    }
+
+    async fn start_workspace(
+        &self,
+        workspace: &Workspace,
+        executor_profile_id: executors::profile::ExecutorProfileId,
+    ) -> Result<(), String> {
+        ContainerService::start_workspace(self, workspace, executor_profile_id)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+}
+
 fn success_exit_status() -> std::process::ExitStatus {
     #[cfg(unix)]
     {
