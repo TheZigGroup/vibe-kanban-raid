@@ -52,6 +52,13 @@
     }
   },
   "unlinkFromOrganization": "取消連結遠端專案",
+  "aiGeneration": {
+    "pending": "排隊等待任務生成",
+    "analyzing": "正在分析需求...",
+    "inProgress": "正在生成任務...",
+    "completed": "已生成 {{count}} 個任務",
+    "failed": "任務生成失敗"
+  },
   "projectNotFound": "您要查找的專案不存在或已被刪除。",
   "viewProject": "查看專案",
   "openInIDE": "在 IDE 中開啟",

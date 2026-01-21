@@ -6,6 +6,7 @@ pub mod image;
 pub mod merge;
 pub mod project;
 pub mod project_repo;
+pub mod project_requirements;
 pub mod repo;
 pub mod scratch;
 pub mod session;

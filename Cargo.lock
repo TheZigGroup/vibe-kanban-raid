@@ -4854,6 +4854,7 @@ dependencies = [
  "db",
  "deployment",
  "dotenv",
+ "dotenvy",
  "executors",
  "futures-util",
  "git2",

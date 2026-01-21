@@ -52,6 +52,13 @@
     }
   },
   "unlinkFromOrganization": "Desvincular de Proyecto Remoto",
+  "aiGeneration": {
+    "pending": "En cola para generación de tareas",
+    "analyzing": "Analizando requisitos...",
+    "inProgress": "Generando tareas...",
+    "completed": "{{count}} tareas generadas",
+    "failed": "Error en la generación de tareas"
+  },
   "projectNotFound": "El proyecto que buscas no existe o ha sido eliminado.",
   "viewProject": "Ver Proyecto",
   "openInIDE": "Abrir en IDE",

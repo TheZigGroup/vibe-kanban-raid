@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO project_requirements (id, project_id, raw_requirements, prd_content)\n            VALUES ($1, $2, $3, $4)\n            RETURNING\n                id              as \"id!: Uuid\",\n                project_id      as \"project_id!: Uuid\",\n                raw_requirements,\n                prd_content,\n                analysis_result,\n                generation_status as \"generation_status!: GenerationStatus\",\n                error_message,\n                created_at      as \"created_at!: DateTime<Utc>\",\n                updated_at      as \"updated_at!: DateTime<Utc>\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "project_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "raw_requirements",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "prd_content",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "analysis_result",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "generation_status!: GenerationStatus",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "error_message",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "681d79d9a825d68e720e713b146f02531bf27f8d89c04450d38266271617318f"
+}

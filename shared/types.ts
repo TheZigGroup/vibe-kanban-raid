@@ -40,15 +40,31 @@ export type UpdateTag = { tag_name: string | null, content: string | null, };
 
 export type TaskStatus = "todo" | "inprogress" | "inreview" | "done" | "cancelled";
 
-export type Task = { id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, created_at: string, updated_at: string, };
+export type TaskSource = "manual" | "ai_generated";
 
-export type TaskWithAttemptStatus = { has_in_progress_attempt: boolean, last_attempt_failed: boolean, executor: string, id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, created_at: string, updated_at: string, };
+export type TaskLayer = "data" | "backend" | "frontend" | "fullstack" | "devops" | "testing";
+
+export type Task = { id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, source: TaskSource, layer: TaskLayer | null, sequence: number | null, created_at: string, updated_at: string, };
+
+export type TaskWithAttemptStatus = { has_in_progress_attempt: boolean, last_attempt_failed: boolean, executor: string, id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, source: TaskSource, layer: TaskLayer | null, sequence: number | null, created_at: string, updated_at: string, };
 
 export type TaskRelationships = { parent_task: Task | null, current_workspace: Workspace, children: Array<Task>, };
 
-export type CreateTask = { project_id: string, title: string, description: string | null, status: TaskStatus | null, parent_workspace_id: string | null, image_ids: Array<string> | null, };
+export type CreateTask = { project_id: string, title: string, description: string | null, status: TaskStatus | null, parent_workspace_id: string | null, image_ids: Array<string> | null, source: TaskSource | null, layer: TaskLayer | null, sequence: number | null, };
 
 export type UpdateTask = { title: string | null, description: string | null, status: TaskStatus | null, parent_workspace_id: string | null, image_ids: Array<string> | null, };
+
+export type GenerationStatus = "pending" | "analyzing" | "generating" | "completed" | "failed";
+
+export type ExtractedFeature = { name: string, description: string, layer: string | null, priority: number | null, };
+
+export type AnalysisResult = { features: Array<ExtractedFeature>, summary: string | null, };
+
+export type ProjectRequirements = { id: string, project_id: string, raw_requirements: string, prd_content: string | null, analysis_result: string | null, generation_status: GenerationStatus, error_message: string | null, created_at: string, updated_at: string, };
+
+export type CreateProjectRequirements = { raw_requirements: string, prd_content: string | null, };
+
+export type ProjectRequirementsStatus = { id: string, project_id: string, generation_status: GenerationStatus, analysis_result: AnalysisResult | null, tasks_generated: number | null, error_message: string | null, created_at: string, updated_at: string, };
 
 export type DraftFollowUpData = { message: string, variant: string | null, };
 

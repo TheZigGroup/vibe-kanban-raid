@@ -52,6 +52,13 @@
     }
   },
   "unlinkFromOrganization": "Unlink from Remote Project",
+  "aiGeneration": {
+    "pending": "Queued for task generation",
+    "analyzing": "Analyzing requirements...",
+    "inProgress": "Generating tasks...",
+    "completed": "{{count}} tasks generated",
+    "failed": "Task generation failed"
+  },
   "projectNotFound": "The project you're looking for doesn't exist or has been deleted.",
   "viewProject": "View Project",
   "openInIDE": "Open in IDE",

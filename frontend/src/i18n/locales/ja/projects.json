@@ -52,6 +52,13 @@
     }
   },
   "unlinkFromOrganization": "リモートプロジェクトからリンク解除",
+  "aiGeneration": {
+    "pending": "タスク生成待機中",
+    "analyzing": "要件を分析中...",
+    "inProgress": "タスクを生成中...",
+    "completed": "{{count}}件のタスクを生成しました",
+    "failed": "タスク生成に失敗しました"
+  },
   "projectNotFound": "お探しのプロジェクトは存在しないか、削除されました。",
   "viewProject": "プロジェクトを表示",
   "openInIDE": "IDEで開く",

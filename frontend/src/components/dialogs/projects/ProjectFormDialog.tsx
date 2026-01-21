@@ -13,6 +13,7 @@ import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { useProjectMutations } from '@/hooks/useProjectMutations';
 import { defineModal } from '@/lib/modals';
 import { RepoPickerDialog } from '@/components/dialogs/shared/RepoPickerDialog';
+import { RequirementsInputDialog } from './RequirementsInputDialog';
 
 export interface ProjectFormDialogProps {}
 
@@ -24,9 +25,22 @@ const ProjectFormDialogImpl = NiceModal.create<ProjectFormDialogProps>(() => {
   const modal = useModal();
 
   const { createProject } = useProjectMutations({
-    onCreateSuccess: (project) => {
-      modal.resolve({ status: 'saved', project } as ProjectFormDialogResult);
+    onCreateSuccess: async (project) => {
+      // Show requirements dialog after project creation
       modal.hide();
+
+      try {
+        await RequirementsInputDialog.show({
+          projectId: project.id,
+          projectName: project.name,
+        });
+
+        // Resolve with the project regardless of requirements outcome
+        modal.resolve({ status: 'saved', project } as ProjectFormDialogResult);
+      } catch {
+        // If the dialog is dismissed, still resolve with the project
+        modal.resolve({ status: 'saved', project } as ProjectFormDialogResult);
+      }
     },
     onCreateError: () => {},
   });

@@ -52,6 +52,13 @@
     }
   },
   "unlinkFromOrganization": "取消链接远程项目",
+  "aiGeneration": {
+    "pending": "排队等待任务生成",
+    "analyzing": "正在分析需求...",
+    "inProgress": "正在生成任务...",
+    "completed": "已生成 {{count}} 个任务",
+    "failed": "任务生成失败"
+  },
   "projectNotFound": "您查找的项目不存在或已被删除。",
   "viewProject": "查看项目",
   "openInIDE": "在 IDE 中打开",

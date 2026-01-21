@@ -52,6 +52,13 @@
     }
   },
   "unlinkFromOrganization": "원격 프로젝트에서 연결 해제",
+  "aiGeneration": {
+    "pending": "태스크 생성 대기 중",
+    "analyzing": "요구사항 분석 중...",
+    "inProgress": "태스크 생성 중...",
+    "completed": "{{count}}개 태스크 생성 완료",
+    "failed": "태스크 생성 실패"
+  },
   "projectNotFound": "찾으시는 프로젝트가 존재하지 않거나 삭제되었습니다.",
   "viewProject": "프로젝트 보기",
   "openInIDE": "IDE에서 열기",

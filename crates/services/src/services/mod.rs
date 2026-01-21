@@ -1,6 +1,7 @@
 pub mod analytics;
 pub mod approvals;
 pub mod auth;
+pub mod claude_api;
 pub mod config;
 pub mod container;
 pub mod diff_stream;
@@ -21,5 +22,6 @@ pub mod qa_repos;
 pub mod queued_message;
 pub mod remote_client;
 pub mod repo;
+pub mod requirements_analyzer;
 pub mod workspace_manager;
 pub mod worktree_manager;

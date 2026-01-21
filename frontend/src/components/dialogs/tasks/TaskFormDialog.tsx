@@ -189,7 +189,9 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
         parent_workspace_id:
           mode === 'subtask' ? props.parentTaskAttemptId : null,
         image_ids: imageIds,
-        shared_task_id: null,
+        source: null,
+        layer: null,
+        sequence: null,
       };
       const shouldAutoStart = value.autoStart && !forceCreateOnlyRef.current;
       if (shouldAutoStart) {

@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                id              as \"id!: Uuid\",\n                project_id      as \"project_id!: Uuid\",\n                raw_requirements,\n                prd_content,\n                analysis_result,\n                generation_status as \"generation_status!: GenerationStatus\",\n                error_message,\n                created_at      as \"created_at!: DateTime<Utc>\",\n                updated_at      as \"updated_at!: DateTime<Utc>\"\n            FROM project_requirements\n            WHERE project_id = $1\n            ORDER BY created_at DESC\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "project_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "raw_requirements",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "prd_content",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "analysis_result",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "generation_status!: GenerationStatus",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "error_message",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "4a7a44158ef76424f85f4aefd16e5006eb4b28d28892c55f1677b1f5a72fdfb1"
+}

@@ -21,6 +21,7 @@ import {
   Trash2,
   Unlink,
 } from 'lucide-react';
+import { AIGenerationIndicator } from './AIGenerationIndicator';
 import { Project } from 'shared/types';
 import { useEffect, useRef } from 'react';
 import { useOpenProjectInEditor } from '@/hooks/useOpenProjectInEditor';
@@ -115,6 +116,7 @@ function ProjectCard({ project, isFocused, setError, onEdit }: Props) {
         <div className="flex items-start justify-between">
           <CardTitle className="text-lg">{project.name}</CardTitle>
           <div className="flex items-center gap-2">
+            <AIGenerationIndicator projectId={project.id} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0">

@@ -20,6 +20,7 @@ pub mod oauth;
 pub mod organizations;
 pub mod projects;
 pub mod repo;
+pub mod requirements;
 pub mod scratch;
 pub mod sessions;
 pub mod tags;
@@ -42,6 +43,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(organizations::router())
         .merge(filesystem::router())
         .merge(repo::router())
+        .merge(requirements::router(&deployment))
         .merge(events::router(&deployment))
         .merge(approvals::router())
         .merge(scratch::router(&deployment))

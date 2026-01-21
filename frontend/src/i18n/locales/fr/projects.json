@@ -52,6 +52,13 @@
     }
   },
   "unlinkFromOrganization": "Délier du projet distant",
+  "aiGeneration": {
+    "pending": "En attente de génération de tâches",
+    "analyzing": "Analyse des exigences...",
+    "inProgress": "Génération des tâches...",
+    "completed": "{{count}} tâches générées",
+    "failed": "Échec de la génération des tâches"
+  },
   "projectNotFound": "Le projet que vous recherchez n'existe pas ou a été supprimé.",
   "viewProject": "Voir le projet",
   "openInIDE": "Ouvrir dans l'IDE",

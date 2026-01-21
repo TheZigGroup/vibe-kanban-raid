@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE project_requirements\n            SET analysis_result = $2,\n                updated_at = datetime('now', 'subsec')\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "bb96c6c7a3dc66bfadbbb6bc8331d857917ea0ea256492ed883e565a50d26325"
+}

@@ -22,6 +22,7 @@ use services::services::{
     project::ProjectServiceError,
     remote_client::RemoteClientError,
     repo::RepoError as RepoServiceError,
+    requirements_analyzer::RequirementsAnalyzerError,
     worktree_manager::WorktreeError,
 };
 use thiserror::Error;
@@ -80,6 +81,8 @@ pub enum ApiError {
     CommandBuilder(#[from] CommandBuildError),
     #[error(transparent)]
     Pty(#[from] PtyError),
+    #[error(transparent)]
+    RequirementsAnalyzer(#[from] RequirementsAnalyzerError),
 }
 
 impl From<&'static str> for ApiError {
@@ -186,6 +189,20 @@ impl IntoResponse for ApiError {
                 PtyError::SessionNotFound(_) => (StatusCode::NOT_FOUND, "PtyError"),
                 PtyError::SessionClosed => (StatusCode::GONE, "PtyError"),
                 _ => (StatusCode::INTERNAL_SERVER_ERROR, "PtyError"),
+            },
+            ApiError::RequirementsAnalyzer(err) => match err {
+                RequirementsAnalyzerError::NotFound => {
+                    (StatusCode::NOT_FOUND, "RequirementsAnalyzerError")
+                }
+                RequirementsAnalyzerError::AlreadyInProgress => {
+                    (StatusCode::CONFLICT, "RequirementsAnalyzerError")
+                }
+                RequirementsAnalyzerError::ClaudeApi(_) => {
+                    (StatusCode::SERVICE_UNAVAILABLE, "RequirementsAnalyzerError")
+                }
+                RequirementsAnalyzerError::Database(_) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, "RequirementsAnalyzerError")
+                }
             },
         };
 

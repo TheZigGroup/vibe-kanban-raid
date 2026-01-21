@@ -88,6 +88,8 @@ import {
   Workspace,
   StartReviewRequest,
   ReviewError,
+  CreateProjectRequirements,
+  ProjectRequirementsStatus,
 } from 'shared/types';
 import type { WorkspaceWithSession } from '@/types/attempt';
 import { createWorkspaceWithSession } from '@/types/attempt';
@@ -1343,5 +1345,50 @@ export const queueApi = {
   getStatus: async (sessionId: string): Promise<QueueStatus> => {
     const response = await makeRequest(`/api/sessions/${sessionId}/queue`);
     return handleApiResponse<QueueStatus>(response);
+  },
+};
+
+// Requirements API for AI-powered task generation
+export const requirementsApi = {
+  /**
+   * Create requirements and start AI analysis to generate tasks
+   */
+  create: async (
+    projectId: string,
+    data: CreateProjectRequirements
+  ): Promise<ProjectRequirementsStatus> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/requirements`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return handleApiResponse<ProjectRequirementsStatus>(response);
+  },
+
+  /**
+   * Get the current status of requirements analysis
+   */
+  get: async (
+    projectId: string
+  ): Promise<ProjectRequirementsStatus | null> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/requirements`
+    );
+    return handleApiResponse<ProjectRequirementsStatus | null>(response);
+  },
+
+  /**
+   * Delete requirements and optionally the generated tasks
+   */
+  delete: async (projectId: string): Promise<void> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/requirements`,
+      {
+        method: 'DELETE',
+      }
+    );
+    return handleApiResponse<void>(response);
   },
 };
