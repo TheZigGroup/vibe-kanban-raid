@@ -47,6 +47,25 @@ pub enum TaskLayer {
     Testing,
 }
 
+/// Type of task in mock-first, architecture-first approach
+#[derive(
+    Debug, Clone, Type, Serialize, Deserialize, PartialEq, TS, EnumString, Display, Default,
+)]
+#[sqlx(type_name = "task_type", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum TaskType {
+    /// Architecture tasks: data models, API contracts, schemas
+    Architecture,
+    /// Mock tasks: mock API clients, mock database layers
+    Mock,
+    /// Implementation tasks: actual feature implementation against mocks
+    #[default]
+    Implementation,
+    /// Integration tasks: wire all layers together
+    Integration,
+}
+
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize, TS)]
 pub struct Task {
     pub id: Uuid,
@@ -57,6 +76,7 @@ pub struct Task {
     pub parent_workspace_id: Option<Uuid>, // Foreign key to parent Workspace
     pub source: TaskSource,
     pub layer: Option<TaskLayer>,
+    pub task_type: Option<TaskType>,
     pub sequence: Option<i32>,
     pub testing_criteria: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -103,6 +123,7 @@ pub struct CreateTask {
     pub image_ids: Option<Vec<Uuid>>,
     pub source: Option<TaskSource>,
     pub layer: Option<TaskLayer>,
+    pub task_type: Option<TaskType>,
     pub sequence: Option<i32>,
     pub testing_criteria: Option<String>,
 }
@@ -122,6 +143,7 @@ impl CreateTask {
             image_ids: None,
             source: None,
             layer: None,
+            task_type: None,
             sequence: None,
             testing_criteria: None,
         }
@@ -133,6 +155,7 @@ impl CreateTask {
         title: String,
         description: Option<String>,
         layer: Option<TaskLayer>,
+        task_type: Option<TaskType>,
         sequence: i32,
         testing_criteria: Option<String>,
     ) -> Self {
@@ -145,6 +168,7 @@ impl CreateTask {
             image_ids: None,
             source: Some(TaskSource::AiGenerated),
             layer,
+            task_type,
             sequence: Some(sequence),
             testing_criteria,
         }
@@ -187,6 +211,7 @@ impl Task {
   t.parent_workspace_id           AS "parent_workspace_id: Uuid",
   t.source                        AS "source!: TaskSource",
   t.layer                         AS "layer: TaskLayer",
+  t.task_type                     AS "task_type: TaskType",
   t.sequence                      AS "sequence: i32",
   t.testing_criteria,
   t.created_at                    AS "created_at!: DateTime<Utc>",
@@ -243,6 +268,7 @@ ORDER BY t.created_at DESC"#,
                     parent_workspace_id: rec.parent_workspace_id,
                     source: rec.source,
                     layer: rec.layer,
+                    task_type: rec.task_type,
                     sequence: rec.sequence,
                     testing_criteria: rec.testing_criteria,
                     created_at: rec.created_at,
@@ -260,7 +286,7 @@ ORDER BY t.created_at DESC"#,
     pub async fn find_by_id(pool: &SqlitePool, id: Uuid) -> Result<Option<Self>, sqlx::Error> {
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE id = $1"#,
             id
@@ -272,7 +298,7 @@ ORDER BY t.created_at DESC"#,
     pub async fn find_by_rowid(pool: &SqlitePool, rowid: i64) -> Result<Option<Self>, sqlx::Error> {
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE rowid = $1"#,
             rowid
@@ -290,9 +316,9 @@ ORDER BY t.created_at DESC"#,
         let source = data.source.clone().unwrap_or_default();
         sqlx::query_as!(
             Task,
-            r#"INSERT INTO tasks (id, project_id, title, description, status, parent_workspace_id, source, layer, sequence, testing_criteria)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
+            r#"INSERT INTO tasks (id, project_id, title, description, status, parent_workspace_id, source, layer, task_type, sequence, testing_criteria)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
             task_id,
             data.project_id,
             data.title,
@@ -301,6 +327,7 @@ ORDER BY t.created_at DESC"#,
             data.parent_workspace_id,
             source,
             data.layer,
+            data.task_type,
             data.sequence,
             data.testing_criteria
         )
@@ -322,7 +349,7 @@ ORDER BY t.created_at DESC"#,
             r#"UPDATE tasks
                SET title = $3, description = $4, status = $5, parent_workspace_id = $6
                WHERE id = $1 AND project_id = $2
-               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
+               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
             id,
             project_id,
             title,
@@ -400,7 +427,7 @@ ORDER BY t.created_at DESC"#,
         // Find only child tasks that have this workspace as their parent
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE parent_workspace_id = $1
                ORDER BY created_at DESC"#,
@@ -464,6 +491,7 @@ ORDER BY t.created_at DESC"#,
                 t.parent_workspace_id as "task_parent_workspace_id: Uuid",
                 t.source as "task_source!: TaskSource",
                 t.layer as "task_layer: TaskLayer",
+                t.task_type as "task_task_type: TaskType",
                 t.sequence as "task_sequence: i32",
                 t.testing_criteria as "task_testing_criteria",
                 t.created_at as "task_created_at!: DateTime<Utc>",
@@ -520,6 +548,7 @@ ORDER BY t.created_at DESC"#,
                     parent_workspace_id: rec.task_parent_workspace_id,
                     source: rec.task_source,
                     layer: rec.task_layer,
+                    task_type: rec.task_task_type,
                     sequence: rec.task_sequence,
                     testing_criteria: rec.task_testing_criteria,
                     created_at: rec.task_created_at,

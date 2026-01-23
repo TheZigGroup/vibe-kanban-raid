@@ -5,7 +5,7 @@ use db::models::{
         AnalysisResult, CreateProjectRequirements, ExtractedFeature, GenerationStatus,
         ProjectRequirements,
     },
-    task::{CreateTask, Task, TaskLayer},
+    task::{CreateTask, Task, TaskLayer, TaskType},
 };
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -53,6 +53,7 @@ struct GeneratedTask {
     title: String,
     description: String,
     layer: Option<String>,
+    task_type: Option<String>,
     testing_criteria: Option<String>,
 }
 
@@ -200,6 +201,11 @@ impl RequirementsAnalyzer {
         let mut prompt = format!(
             r#"Analyze the following project requirements and extract distinct features that need to be implemented.
 
+## Technology Stack (Fixed)
+- Frontend: React + Vite + Zustand (state management)
+- Backend: Node.js
+- Database: SQLite
+
 ## Requirements
 {}
 "#,
@@ -221,13 +227,14 @@ impl RequirementsAnalyzer {
 ## Instructions
 1. Identify distinct features that need to be implemented
 2. For each feature, determine which layer it primarily belongs to:
-   - "data": Database models, schemas, migrations
-   - "backend": API endpoints, business logic, services
-   - "frontend": UI components, pages, user interactions
+   - "data": Database models, schemas, migrations (SQLite)
+   - "backend": API endpoints, business logic, services (Node.js)
+   - "frontend": UI components, pages, user interactions (React + Vite + Zustand)
    - "fullstack": Features spanning multiple layers
    - "devops": Infrastructure, deployment, CI/CD
    - "testing": Test coverage, test utilities
 3. Assign a priority (1=highest, 5=lowest) based on dependencies and importance
+4. Consider cross-layer dependencies - features that require data models, API contracts, and UI components
 
 ## Output Format
 Return ONLY valid JSON with this structure:
@@ -236,7 +243,7 @@ Return ONLY valid JSON with this structure:
   "features": [
     {
       "name": "Feature name",
-      "description": "Brief description of what needs to be built",
+      "description": "Brief description of what needs to be built, including any cross-layer dependencies",
       "layer": "backend|frontend|data|fullstack|devops|testing",
       "priority": 1
     }
@@ -249,6 +256,7 @@ Return ONLY valid JSON with this structure:
 
         let system = Some(
             "You are a software architect analyzing requirements to extract features for a kanban board. \
+             The project uses React + Vite + Zustand for frontend, Node.js for backend, and SQLite for database. \
              Be concise and practical. Focus on actionable features that can be implemented as tasks. \
              Output valid JSON only."
                 .to_string(),
@@ -271,63 +279,101 @@ Return ONLY valid JSON with this structure:
         })
     }
 
-    /// Phase 2: Generate implementation tasks from features
+    /// Phase 2: Generate implementation tasks from features using mock-first, architecture-first approach
     async fn generate_tasks_from_features(
         &self,
         project_id: Uuid,
         features: &[ExtractedFeature],
     ) -> Result<usize, RequirementsAnalyzerError> {
+        // Generate all tasks at once using the architecture-first approach
+        let tasks = self.generate_architecture_first_tasks(features).await?;
+
         let mut total_tasks = 0;
-        let mut sequence = 0;
+        for task in tasks {
+            let layer = task.layer.and_then(|l| parse_layer(&l));
+            let task_type = task.task_type.and_then(|t| parse_task_type(&t));
 
-        // Sort features by priority
-        let mut sorted_features: Vec<_> = features.iter().collect();
-        sorted_features.sort_by_key(|f| f.priority.unwrap_or(3));
+            // Determine sequence based on task type
+            let sequence = calculate_sequence(&task_type, total_tasks);
 
-        for feature in sorted_features {
-            let tasks = self.generate_tasks_for_feature(feature).await?;
+            let create_task = CreateTask::ai_generated(
+                project_id,
+                task.title,
+                Some(task.description),
+                layer,
+                task_type,
+                sequence,
+                task.testing_criteria,
+            );
 
-            for task in tasks {
-                let layer = task.layer.and_then(|l| parse_layer(&l));
-
-                let create_task = CreateTask::ai_generated(
-                    project_id,
-                    task.title,
-                    Some(task.description),
-                    layer,
-                    sequence,
-                    task.testing_criteria,
-                );
-
-                Task::create(&self.pool, &create_task, Uuid::new_v4()).await?;
-                sequence += 1;
-                total_tasks += 1;
-            }
+            Task::create(&self.pool, &create_task, Uuid::new_v4()).await?;
+            total_tasks += 1;
         }
 
         Ok(total_tasks)
     }
 
-    /// Generate implementation tasks for a single feature
-    async fn generate_tasks_for_feature(
+    /// Generate tasks using mock-first, architecture-first approach
+    async fn generate_architecture_first_tasks(
         &self,
-        feature: &ExtractedFeature,
+        features: &[ExtractedFeature],
     ) -> Result<Vec<GeneratedTask>, RequirementsAnalyzerError> {
+        let features_json = features
+            .iter()
+            .map(|f| {
+                format!(
+                    r#"  - Name: {}
+    Description: {}
+    Layer: {}"#,
+                    f.name,
+                    f.description,
+                    f.layer.as_deref().unwrap_or("fullstack")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
         let prompt = format!(
-            r#"Generate implementation tasks for the following feature:
+            r#"Generate implementation tasks for the following features using a mock-first, architecture-first approach.
 
-## Feature
-Name: {}
-Description: {}
-Layer: {}
+## Technology Stack (Fixed)
+- Frontend: React + Vite + Zustand (state management)
+- Backend: Node.js
+- Database: SQLite
 
-## Instructions
-Break this feature down into specific, actionable implementation tasks.
-Each task should be:
-- Small enough to complete in one focused session
-- Clear about what needs to be done
-- Assigned to the appropriate layer (data/backend/frontend/fullstack/devops/testing)
-- Include specific testing criteria that can verify the task is complete
+## Features
+{}
+
+## Task Generation Strategy
+
+Generate tasks in this EXACT ORDER:
+
+### 1. Architecture Tasks (task_type: "architecture")
+Define data models, API contracts, and schemas FIRST:
+- TypeScript interfaces/types for all data models
+- API endpoint contracts (request/response shapes)
+- SQLite schema definitions
+- Zustand store interfaces
+
+### 2. Mock Tasks (task_type: "mock")
+Create mock implementations for each layer:
+- Frontend: Mock API client that returns hardcoded data matching the contracts
+- Backend: Mock database layer with in-memory data
+These mocks allow parallel development and testing without real dependencies.
+
+### 3. Implementation Tasks (task_type: "implementation")
+Build real implementations that work against mocks:
+- Frontend components using the mock API client
+- Backend API endpoints using the mock database
+- Database migrations and real SQLite queries
+- Zustand stores with real state management
+Each task should explicitly mention it works against the mock layer.
+
+### 4. Integration Task (task_type: "integration")
+Final task to wire everything together:
+- Replace mock API client with real HTTP calls
+- Replace mock database with real SQLite
+- End-to-end testing of the complete flow
 
 ## Output Format
 Return ONLY valid JSON:
@@ -336,22 +382,31 @@ Return ONLY valid JSON:
   "tasks": [
     {{
       "title": "Short task title",
-      "description": "Detailed description of what to implement",
+      "description": "Detailed description including which mock layer it uses if applicable",
       "layer": "backend|frontend|data|fullstack|devops|testing",
-      "testing_criteria": "Specific, verifiable criteria to confirm this task is complete. Include what to test, expected behavior, and edge cases to verify."
+      "task_type": "architecture|mock|implementation|integration",
+      "testing_criteria": "Specific, verifiable criteria to confirm this task is complete"
     }}
   ]
 }}
 ```
+
+IMPORTANT:
+- Architecture tasks come FIRST
+- Mock tasks come SECOND
+- Implementation tasks reference the mocks they use
+- ONE integration task at the END
+- All tasks must reference the specific tech stack (React+Vite+Zustand, Node.js, SQLite)
 "#,
-            feature.name,
-            feature.description,
-            feature.layer.as_deref().unwrap_or("fullstack")
+            features_json
         );
 
         let system = Some(
-            "You are a software engineer breaking down features into implementation tasks. \
-             Create practical, actionable tasks with clear testing criteria. Output valid JSON only."
+            "You are a software architect generating implementation tasks using a mock-first, \
+             architecture-first approach. This enables parallel development by defining contracts first, \
+             then building mocks, then real implementations against those mocks, and finally integrating. \
+             The project uses React + Vite + Zustand for frontend, Node.js for backend, and SQLite for database. \
+             Output valid JSON only."
                 .to_string(),
         );
 
@@ -396,4 +451,31 @@ fn parse_layer(s: &str) -> Option<TaskLayer> {
         "testing" => Some(TaskLayer::Testing),
         _ => None,
     }
+}
+
+fn parse_task_type(s: &str) -> Option<TaskType> {
+    match s.to_lowercase().as_str() {
+        "architecture" => Some(TaskType::Architecture),
+        "mock" => Some(TaskType::Mock),
+        "implementation" => Some(TaskType::Implementation),
+        "integration" => Some(TaskType::Integration),
+        _ => None,
+    }
+}
+
+/// Calculate sequence number based on task type to ensure proper ordering.
+/// Sequence ranges:
+/// - Architecture: 0-99
+/// - Mock: 100-199
+/// - Implementation: 200-899
+/// - Integration: 900+
+fn calculate_sequence(task_type: &Option<TaskType>, task_index: usize) -> i32 {
+    let base = match task_type {
+        Some(TaskType::Architecture) => 0,
+        Some(TaskType::Mock) => 100,
+        Some(TaskType::Implementation) => 200,
+        Some(TaskType::Integration) => 900,
+        None => 200, // Default to implementation range
+    };
+    base + (task_index as i32 % 100)
 }

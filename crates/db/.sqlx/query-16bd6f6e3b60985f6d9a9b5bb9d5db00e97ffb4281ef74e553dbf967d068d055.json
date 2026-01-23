@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "INSERT INTO tasks (id, project_id, title, description, status, parent_workspace_id, source, layer, sequence, testing_criteria)\n               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\n               RETURNING id as \"id!: Uuid\", project_id as \"project_id!: Uuid\", title, description, status as \"status!: TaskStatus\", parent_workspace_id as \"parent_workspace_id: Uuid\", source as \"source!: TaskSource\", layer as \"layer: TaskLayer\", sequence as \"sequence: i32\", testing_criteria, created_at as \"created_at!: DateTime<Utc>\", updated_at as \"updated_at!: DateTime<Utc>\"",
+  "query": "SELECT id as \"id!: Uuid\", project_id as \"project_id!: Uuid\", title, description, status as \"status!: TaskStatus\", parent_workspace_id as \"parent_workspace_id: Uuid\", source as \"source!: TaskSource\", layer as \"layer: TaskLayer\", task_type as \"task_type: TaskType\", sequence as \"sequence: i32\", testing_criteria, created_at as \"created_at!: DateTime<Utc>\", updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM tasks\n               WHERE parent_workspace_id = $1\n               ORDER BY created_at DESC",
   "describe": {
     "columns": [
       {
@@ -44,28 +44,33 @@
         "type_info": "Text"
       },
       {
-        "name": "sequence: i32",
+        "name": "task_type: TaskType",
         "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "sequence: i32",
+        "ordinal": 9,
         "type_info": "Integer"
       },
       {
         "name": "testing_criteria",
-        "ordinal": 9,
-        "type_info": "Text"
-      },
-      {
-        "name": "created_at!: DateTime<Utc>",
         "ordinal": 10,
         "type_info": "Text"
       },
       {
-        "name": "updated_at!: DateTime<Utc>",
+        "name": "created_at!: DateTime<Utc>",
         "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 12,
         "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 10
+      "Right": 1
     },
     "nullable": [
       true,
@@ -78,9 +83,10 @@
       true,
       true,
       true,
+      true,
       false,
       false
     ]
   },
-  "hash": "dc3fef7fe072f121181ae814cbaa2191297e01dc45a42d77cf06593269a5967b"
+  "hash": "16bd6f6e3b60985f6d9a9b5bb9d5db00e97ffb4281ef74e553dbf967d068d055"
 }
