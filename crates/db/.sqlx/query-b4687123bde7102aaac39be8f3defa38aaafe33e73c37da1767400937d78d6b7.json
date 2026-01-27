@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) as \"count!: i64\"\n            FROM review_automation_logs\n            WHERE task_id = $1 AND action = 'merge_conflict'",
+  "describe": {
+    "columns": [
+      {
+        "name": "count!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b4687123bde7102aaac39be8f3defa38aaafe33e73c37da1767400937d78d6b7"
+}

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT\n                id as \"id!: Uuid\",\n                project_id as \"project_id!: Uuid\",\n                enabled as \"enabled!: bool\",\n                interval_seconds as \"interval_seconds!: i32\",\n                created_at as \"created_at!: DateTime<Utc>\",\n                updated_at as \"updated_at!: DateTime<Utc>\"\n            FROM project_agent_settings\n            WHERE enabled = 1",
+  "query": "SELECT\n                id as \"id!: Uuid\",\n                project_id as \"project_id!: Uuid\",\n                enabled as \"enabled!: bool\",\n                interval_seconds as \"interval_seconds!: i32\",\n                max_breakdown_depth as \"max_breakdown_depth!: i32\",\n                created_at as \"created_at!: DateTime<Utc>\",\n                updated_at as \"updated_at!: DateTime<Utc>\"\n            FROM project_agent_settings\n            WHERE enabled = 1",
   "describe": {
     "columns": [
       {
@@ -24,13 +24,18 @@
         "type_info": "Integer"
       },
       {
-        "name": "created_at!: DateTime<Utc>",
+        "name": "max_breakdown_depth!: i32",
         "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 5,
         "type_info": "Datetime"
       },
       {
         "name": "updated_at!: DateTime<Utc>",
-        "ordinal": 5,
+        "ordinal": 6,
         "type_info": "Datetime"
       }
     ],
@@ -43,8 +48,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "173b6c1c9ba10e95b406e42e8b0535d0de6d74dae177963fcb91b49a31b0e19b"
+  "hash": "f4d1518b24af68cb44d043a418b7faa8469de6df79d4f94dd51a8314c5d909e8"
 }

@@ -185,8 +185,11 @@ export function CreateChatBoxContainer() {
         image_ids: getImageIds(),
         source: null,
         layer: null,
+        task_type: null,
         sequence: null,
         testing_criteria: null,
+        parent_task_id: null,
+        prevent_breakdown: null,
       },
       executor_profile_id: effectiveProfile,
       repos: repos.map((r) => ({

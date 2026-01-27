@@ -47,7 +47,7 @@ pub enum TaskLayer {
     Testing,
 }
 
-/// Type of task in mock-first, architecture-first approach
+/// Type of task in architecture-first approach
 #[derive(
     Debug, Clone, Type, Serialize, Deserialize, PartialEq, TS, EnumString, Display, Default,
 )]
@@ -57,9 +57,7 @@ pub enum TaskLayer {
 pub enum TaskType {
     /// Architecture tasks: data models, API contracts, schemas
     Architecture,
-    /// Mock tasks: mock API clients, mock database layers
-    Mock,
-    /// Implementation tasks: actual feature implementation against mocks
+    /// Implementation tasks: actual feature implementation
     #[default]
     Implementation,
     /// Integration tasks: wire all layers together
@@ -79,6 +77,11 @@ pub struct Task {
     pub task_type: Option<TaskType>,
     pub sequence: Option<i32>,
     pub testing_criteria: Option<String>,
+    pub stage_started_at: Option<DateTime<Utc>>, // When task entered current status stage (for timeout detection)
+    pub complexity_score: Option<i32>,            // AI-analyzed complexity (1-10)
+    pub parent_task_id: Option<Uuid>,             // Link to parent task when broken down
+    pub prevent_breakdown: bool,                  // Prevent automatic task breakdown
+    pub post_task_actions: Option<String>,        // Instructions for updating .progress file
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -126,6 +129,9 @@ pub struct CreateTask {
     pub task_type: Option<TaskType>,
     pub sequence: Option<i32>,
     pub testing_criteria: Option<String>,
+    pub parent_task_id: Option<Uuid>,    // Link to parent task when broken down
+    pub prevent_breakdown: Option<bool>, // Prevent automatic task breakdown
+    pub post_task_actions: Option<String>, // Instructions for updating .progress file
 }
 
 impl CreateTask {
@@ -146,6 +152,9 @@ impl CreateTask {
             task_type: None,
             sequence: None,
             testing_criteria: None,
+            parent_task_id: None,
+            prevent_breakdown: None,
+            post_task_actions: None,
         }
     }
 
@@ -158,6 +167,7 @@ impl CreateTask {
         task_type: Option<TaskType>,
         sequence: i32,
         testing_criteria: Option<String>,
+        post_task_actions: Option<String>,
     ) -> Self {
         Self {
             project_id,
@@ -171,6 +181,40 @@ impl CreateTask {
             task_type,
             sequence: Some(sequence),
             testing_criteria,
+            parent_task_id: None,
+            prevent_breakdown: None,
+            post_task_actions,
+        }
+    }
+
+    /// Create a subtask broken down from a complex parent task
+    /// Subtasks automatically have prevent_breakdown=true to avoid recursive breakdown
+    pub fn subtask_of(
+        project_id: Uuid,
+        title: String,
+        description: Option<String>,
+        layer: Option<TaskLayer>,
+        task_type: Option<TaskType>,
+        sequence: i32,
+        testing_criteria: Option<String>,
+        post_task_actions: Option<String>,
+        parent_task_id: Uuid,
+    ) -> Self {
+        Self {
+            project_id,
+            title,
+            description,
+            status: Some(TaskStatus::Todo),
+            parent_workspace_id: None,
+            image_ids: None,
+            source: Some(TaskSource::AiGenerated),
+            layer,
+            task_type,
+            sequence: Some(sequence),
+            testing_criteria,
+            parent_task_id: Some(parent_task_id),
+            prevent_breakdown: Some(true), // Subtasks should not be broken down further
+            post_task_actions,
         }
     }
 }
@@ -214,6 +258,11 @@ impl Task {
   t.task_type                     AS "task_type: TaskType",
   t.sequence                      AS "sequence: i32",
   t.testing_criteria,
+  t.stage_started_at              AS "stage_started_at: DateTime<Utc>",
+  t.complexity_score              AS "complexity_score: i32",
+  t.parent_task_id                AS "parent_task_id: Uuid",
+  t.prevent_breakdown             AS "prevent_breakdown!: i64",
+  t.post_task_actions,
   t.created_at                    AS "created_at!: DateTime<Utc>",
   t.updated_at                    AS "updated_at!: DateTime<Utc>",
 
@@ -271,6 +320,11 @@ ORDER BY t.created_at DESC"#,
                     task_type: rec.task_type,
                     sequence: rec.sequence,
                     testing_criteria: rec.testing_criteria,
+                    stage_started_at: rec.stage_started_at,
+                    complexity_score: rec.complexity_score,
+                    parent_task_id: rec.parent_task_id,
+                    prevent_breakdown: rec.prevent_breakdown != 0,
+                    post_task_actions: rec.post_task_actions,
                     created_at: rec.created_at,
                     updated_at: rec.updated_at,
                 },
@@ -286,7 +340,7 @@ ORDER BY t.created_at DESC"#,
     pub async fn find_by_id(pool: &SqlitePool, id: Uuid) -> Result<Option<Self>, sqlx::Error> {
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, stage_started_at as "stage_started_at: DateTime<Utc>", complexity_score as "complexity_score: i32", parent_task_id as "parent_task_id: Uuid", prevent_breakdown as "prevent_breakdown!: bool", post_task_actions, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE id = $1"#,
             id
@@ -298,7 +352,7 @@ ORDER BY t.created_at DESC"#,
     pub async fn find_by_rowid(pool: &SqlitePool, rowid: i64) -> Result<Option<Self>, sqlx::Error> {
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, stage_started_at as "stage_started_at: DateTime<Utc>", complexity_score as "complexity_score: i32", parent_task_id as "parent_task_id: Uuid", prevent_breakdown as "prevent_breakdown!: bool", post_task_actions, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE rowid = $1"#,
             rowid
@@ -314,11 +368,12 @@ ORDER BY t.created_at DESC"#,
     ) -> Result<Self, sqlx::Error> {
         let status = data.status.clone().unwrap_or_default();
         let source = data.source.clone().unwrap_or_default();
+        let prevent_breakdown = data.prevent_breakdown.unwrap_or(false);
         sqlx::query_as!(
             Task,
-            r#"INSERT INTO tasks (id, project_id, title, description, status, parent_workspace_id, source, layer, task_type, sequence, testing_criteria)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
+            r#"INSERT INTO tasks (id, project_id, title, description, status, parent_workspace_id, source, layer, task_type, sequence, testing_criteria, parent_task_id, prevent_breakdown, post_task_actions)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, stage_started_at as "stage_started_at: DateTime<Utc>", complexity_score as "complexity_score: i32", parent_task_id as "parent_task_id: Uuid", prevent_breakdown as "prevent_breakdown!: bool", post_task_actions, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
             task_id,
             data.project_id,
             data.title,
@@ -329,7 +384,10 @@ ORDER BY t.created_at DESC"#,
             data.layer,
             data.task_type,
             data.sequence,
-            data.testing_criteria
+            data.testing_criteria,
+            data.parent_task_id,
+            prevent_breakdown,
+            data.post_task_actions
         )
         .fetch_one(pool)
         .await
@@ -349,7 +407,7 @@ ORDER BY t.created_at DESC"#,
             r#"UPDATE tasks
                SET title = $3, description = $4, status = $5, parent_workspace_id = $6
                WHERE id = $1 AND project_id = $2
-               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
+               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, stage_started_at as "stage_started_at: DateTime<Utc>", complexity_score as "complexity_score: i32", parent_task_id as "parent_task_id: Uuid", prevent_breakdown as "prevent_breakdown!: bool", post_task_actions, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
             id,
             project_id,
             title,
@@ -366,14 +424,99 @@ ORDER BY t.created_at DESC"#,
         id: Uuid,
         status: TaskStatus,
     ) -> Result<(), sqlx::Error> {
+        // Set stage_started_at when entering InProgress or InReview, clear it otherwise
+        let should_set_stage_time =
+            matches!(status, TaskStatus::InProgress | TaskStatus::InReview);
+
+        if should_set_stage_time {
+            sqlx::query!(
+                "UPDATE tasks SET status = $2, stage_started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+                id,
+                status
+            )
+            .execute(pool)
+            .await?;
+        } else {
+            sqlx::query!(
+                "UPDATE tasks SET status = $2, stage_started_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+                id,
+                status
+            )
+            .execute(pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// Find tasks that have been stalled in a given status for longer than the timeout
+    pub async fn find_stalled_tasks(
+        pool: &SqlitePool,
+        project_id: Uuid,
+        status: TaskStatus,
+        timeout_minutes: i64,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let timeout_str = format!("-{} minutes", timeout_minutes);
+        sqlx::query_as!(
+            Task,
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, stage_started_at as "stage_started_at: DateTime<Utc>", complexity_score as "complexity_score: i32", parent_task_id as "parent_task_id: Uuid", prevent_breakdown as "prevent_breakdown!: bool", post_task_actions, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+               FROM tasks
+               WHERE project_id = $1
+                 AND status = $2
+                 AND stage_started_at IS NOT NULL
+                 AND datetime(stage_started_at) < datetime('now', $3)
+               ORDER BY stage_started_at ASC"#,
+            project_id,
+            status,
+            timeout_str
+        )
+        .fetch_all(pool)
+        .await
+    }
+
+    /// Update the complexity score for a task
+    pub async fn update_complexity_score(
+        pool: &SqlitePool,
+        id: Uuid,
+        complexity_score: i32,
+    ) -> Result<(), sqlx::Error> {
         sqlx::query!(
-            "UPDATE tasks SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+            "UPDATE tasks SET complexity_score = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
             id,
-            status
+            complexity_score
         )
         .execute(pool)
         .await?;
         Ok(())
+    }
+
+    /// Update the parent_task_id field for a task (for subtask linking)
+    pub async fn update_parent_task_id(
+        pool: &SqlitePool,
+        task_id: Uuid,
+        parent_task_id: Option<Uuid>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            "UPDATE tasks SET parent_task_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+            task_id,
+            parent_task_id
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Find subtasks of a parent task
+    pub async fn find_subtasks(pool: &SqlitePool, parent_task_id: Uuid) -> Result<Vec<Self>, sqlx::Error> {
+        sqlx::query_as!(
+            Task,
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, stage_started_at as "stage_started_at: DateTime<Utc>", complexity_score as "complexity_score: i32", parent_task_id as "parent_task_id: Uuid", prevent_breakdown as "prevent_breakdown!: bool", post_task_actions, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+               FROM tasks
+               WHERE parent_task_id = $1
+               ORDER BY sequence ASC, created_at ASC"#,
+            parent_task_id
+        )
+        .fetch_all(pool)
+        .await
     }
 
     /// Update the parent_workspace_id field for a task
@@ -427,7 +570,7 @@ ORDER BY t.created_at DESC"#,
         // Find only child tasks that have this workspace as their parent
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", source as "source!: TaskSource", layer as "layer: TaskLayer", task_type as "task_type: TaskType", sequence as "sequence: i32", testing_criteria, stage_started_at as "stage_started_at: DateTime<Utc>", complexity_score as "complexity_score: i32", parent_task_id as "parent_task_id: Uuid", prevent_breakdown as "prevent_breakdown!: bool", post_task_actions, created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE parent_workspace_id = $1
                ORDER BY created_at DESC"#,
@@ -494,6 +637,11 @@ ORDER BY t.created_at DESC"#,
                 t.task_type as "task_task_type: TaskType",
                 t.sequence as "task_sequence: i32",
                 t.testing_criteria as "task_testing_criteria",
+                t.stage_started_at as "task_stage_started_at: DateTime<Utc>",
+                t.complexity_score as "task_complexity_score: i32",
+                t.parent_task_id as "task_parent_task_id: Uuid",
+                t.prevent_breakdown as "task_prevent_breakdown!: bool",
+                t.post_task_actions as "task_post_task_actions",
                 t.created_at as "task_created_at!: DateTime<Utc>",
                 t.updated_at as "task_updated_at!: DateTime<Utc>",
                 w.id as "workspace_id!: Uuid",
@@ -551,6 +699,11 @@ ORDER BY t.created_at DESC"#,
                     task_type: rec.task_task_type,
                     sequence: rec.task_sequence,
                     testing_criteria: rec.task_testing_criteria,
+                    stage_started_at: rec.task_stage_started_at,
+                    complexity_score: rec.task_complexity_score,
+                    parent_task_id: rec.task_parent_task_id,
+                    prevent_breakdown: rec.task_prevent_breakdown,
+                    post_task_actions: rec.task_post_task_actions,
                     created_at: rec.task_created_at,
                     updated_at: rec.task_updated_at,
                 };

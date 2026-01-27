@@ -1509,4 +1509,12 @@ export const reviewAutomationApi = {
     );
     return handleApiResponse<ReviewAutomationLog[]>(response);
   },
+
+  /**
+   * Get review automation logs for a specific task
+   */
+  getLogsByTask: async (taskId: string): Promise<ReviewAutomationLog[]> => {
+    const response = await makeRequest(`/api/tasks/${taskId}/review-logs`);
+    return handleApiResponse<ReviewAutomationLog[]>(response);
+  },
 };

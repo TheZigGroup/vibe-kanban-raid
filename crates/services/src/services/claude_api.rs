@@ -224,12 +224,48 @@ impl ClaudeApiClient {
         prompt: &str,
         system: Option<String>,
     ) -> Result<T, ClaudeApiError> {
-        let response = self.ask(prompt, system).await?;
+        self.ask_json_with_max_tokens(prompt, system, 4096).await
+    }
+
+    /// Send a prompt expecting JSON in the response with custom max_tokens
+    pub async fn ask_json_with_max_tokens<T: for<'de> Deserialize<'de>>(
+        &self,
+        prompt: &str,
+        system: Option<String>,
+        max_tokens: u32,
+    ) -> Result<T, ClaudeApiError> {
+        let response = self
+            .complete(vec![Message::user(prompt)], system, max_tokens)
+            .await?
+            .text()
+            .map(|s| s.to_string())
+            .ok_or_else(|| ClaudeApiError::Serde("No text content in response".to_string()))?;
+
+        if response.trim().is_empty() {
+            tracing::error!("Claude returned an empty response");
+            return Err(ClaudeApiError::Serde("Empty response from Claude".to_string()));
+        }
 
         // Try to extract JSON from the response (it might be wrapped in markdown code blocks)
         let json_str = extract_json(&response);
 
-        serde_json::from_str(json_str).map_err(|e| ClaudeApiError::Serde(e.to_string()))
+        if json_str.trim().is_empty() {
+            tracing::error!(
+                response = %response,
+                "Failed to extract JSON from response"
+            );
+            return Err(ClaudeApiError::Serde(format!("Could not extract JSON from response: {}", response)));
+        }
+
+        serde_json::from_str(json_str).map_err(|e| {
+            tracing::error!(
+                json_error = %e,
+                response_length = response.len(),
+                extracted_json_preview = %json_str.chars().take(500).collect::<String>(),
+                "Failed to parse JSON response from Claude"
+            );
+            ClaudeApiError::Serde(format!("{} (response preview: {})", e, json_str.chars().take(500).collect::<String>()))
+        })
     }
 }
 

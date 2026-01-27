@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { KanbanCard } from '@/components/ui/shadcn-io/kanban';
-import { Link, Loader2, XCircle, ClipboardCheck, ChevronDown, ChevronUp } from 'lucide-react';
+import { Link, Loader2, XCircle, ClipboardCheck, ChevronDown, ChevronUp, FileSearch } from 'lucide-react';
 import type { TaskWithAttemptStatus } from 'shared/types';
 import { ActionsDropdown } from '@/components/ui/actions-dropdown';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,9 @@ import { useNavigateWithSearch } from '@/hooks';
 import { paths } from '@/lib/paths';
 import { attemptsApi } from '@/lib/api';
 import { TaskCardHeader } from './TaskCardHeader';
+import { TaskTypeBadge, TaskLayerBadge } from './TaskTypeBadge';
 import { useTranslation } from 'react-i18next';
+import { ReviewStatusDialog } from '@/components/dialogs/tasks/ReviewStatusDialog';
 
 type Task = TaskWithAttemptStatus;
 
@@ -61,6 +63,17 @@ export function TaskCard({
     [task.parent_workspace_id, projectId, navigate, isNavigatingToParent]
   );
 
+  const handleReviewStatusClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      ReviewStatusDialog.show({
+        taskId: task.id,
+        taskTitle: task.title,
+      });
+    },
+    [task.id, task.title]
+  );
+
   const localRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -97,6 +110,17 @@ export function TaskCard({
               {task.last_attempt_failed && (
                 <XCircle className="h-4 w-4 text-destructive" />
               )}
+              {task.status === 'inreview' && (
+                <Button
+                  variant="icon"
+                  onClick={handleReviewStatusClick}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  title={t('reviewStatus')}
+                >
+                  <FileSearch className="h-4 w-4 text-yellow-500" />
+                </Button>
+              )}
               {task.parent_workspace_id && (
                 <Button
                   variant="icon"
@@ -119,6 +143,12 @@ export function TaskCard({
               ? `${task.description.substring(0, 130)}...`
               : task.description}
           </p>
+        )}
+        {(task.task_type || task.layer) && (
+          <div className="flex flex-wrap gap-1.5">
+            <TaskTypeBadge taskType={task.task_type} />
+            <TaskLayerBadge layer={task.layer} />
+          </div>
         )}
         {task.testing_criteria && (
           <div className="mt-2 border-t pt-2">

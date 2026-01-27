@@ -14,6 +14,7 @@ use tracing::{error, info};
 use uuid::Uuid;
 
 use super::claude_api::{ClaudeApiClient, ClaudeApiError};
+use super::codebase_rules;
 
 #[derive(Debug, Error)]
 pub enum RequirementsAnalyzerError {
@@ -55,6 +56,8 @@ struct GeneratedTask {
     layer: Option<String>,
     task_type: Option<String>,
     testing_criteria: Option<String>,
+    files_to_modify: Option<Vec<String>>,
+    post_task_actions: Option<String>,
 }
 
 /// Service for analyzing requirements and generating tasks
@@ -201,10 +204,7 @@ impl RequirementsAnalyzer {
         let mut prompt = format!(
             r#"Analyze the following project requirements and extract distinct features that need to be implemented.
 
-## Technology Stack (Fixed)
-- Frontend: React + Vite + Zustand (state management)
-- Backend: Node.js
-- Database: SQLite
+IMPORTANT: This is for an EXISTING working project. Features should be analyzed in the context of extending/modifying the existing codebase.
 
 ## Requirements
 {}
@@ -255,10 +255,9 @@ Return ONLY valid JSON with this structure:
         );
 
         let system = Some(
-            "You are a software architect analyzing requirements to extract features for a kanban board. \
-             The project uses React + Vite + Zustand for frontend, Node.js for backend, and SQLite for database. \
-             Be concise and practical. Focus on actionable features that can be implemented as tasks. \
-             Output valid JSON only."
+            "You are a software architect analyzing requirements for an EXISTING project to extract features. \
+             Consider that you're working with an established codebase and architecture. Be concise and practical. \
+             Focus on actionable features that extend or modify the existing system. Output valid JSON only."
                 .to_string(),
         );
 
@@ -304,6 +303,7 @@ Return ONLY valid JSON with this structure:
                 task_type,
                 sequence,
                 task.testing_criteria,
+                task.post_task_actions,
             );
 
             Task::create(&self.pool, &create_task, Uuid::new_v4()).await?;
@@ -333,15 +333,17 @@ Return ONLY valid JSON with this structure:
             .collect::<Vec<_>>()
             .join("\n");
 
+        let rules = codebase_rules::get_all_rules();
+
         let prompt = format!(
-            r#"Generate implementation tasks for the following features using a mock-first, architecture-first approach.
+            r#"Generate implementation tasks for the following features.
 
-## Technology Stack (Fixed)
-- Frontend: React + Vite + Zustand (state management)
-- Backend: Node.js
-- Database: SQLite
+IMPORTANT: This is an EXISTING working project. You must analyze the existing codebase structure and generate tasks that work with the existing files and architecture.
 
-## Features
+## ARCHITECTURE RULES (MUST FOLLOW)
+{}
+
+## Features to Implement
 {}
 
 ## Task Generation Strategy
@@ -349,31 +351,28 @@ Return ONLY valid JSON with this structure:
 Generate tasks in this EXACT ORDER:
 
 ### 1. Architecture Tasks (task_type: "architecture")
-Define data models, API contracts, and schemas FIRST:
-- TypeScript interfaces/types for all data models
-- API endpoint contracts (request/response shapes)
-- SQLite schema definitions
-- Zustand store interfaces
+Analyze existing architecture and define any new models/contracts needed:
+- Identify existing data models, API patterns, state management
+- Define any NEW interfaces/types needed for the features
+- Design database schema changes if needed
+- Create database migrations if database changes are required
+- Ensure database is initialized before proceeding
 
-### 2. Mock Tasks (task_type: "mock")
-Create mock implementations for each layer:
-- Frontend: Mock API client that returns hardcoded data matching the contracts
-- Backend: Mock database layer with in-memory data
-These mocks allow parallel development and testing without real dependencies.
+### 2. Implementation Tasks (task_type: "implementation")
+Build real implementations working with the existing codebase:
+- Modify existing files or create new ones following project conventions
+- Integrate with existing patterns and services
+- Reference specific files that need modification
+- Implement full functionality (no mocks - build the real thing)
+- Include database operations if needed (queries, mutations)
+- Run and test migrations as part of implementation
 
-### 3. Implementation Tasks (task_type: "implementation")
-Build real implementations that work against mocks:
-- Frontend components using the mock API client
-- Backend API endpoints using the mock database
-- Database migrations and real SQLite queries
-- Zustand stores with real state management
-Each task should explicitly mention it works against the mock layer.
-
-### 4. Integration Task (task_type: "integration")
-Final task to wire everything together:
-- Replace mock API client with real HTTP calls
-- Replace mock database with real SQLite
+### 3. Integration Task (task_type: "integration")
+Wire new features into the existing application:
+- Connect new endpoints/components to existing infrastructure
+- Verify database migrations have been applied
 - End-to-end testing of the complete flow
+- Ensure all database tables and schemas are correct
 
 ## Output Format
 Return ONLY valid JSON:
@@ -382,35 +381,52 @@ Return ONLY valid JSON:
   "tasks": [
     {{
       "title": "Short task title",
-      "description": "Detailed description including which mock layer it uses if applicable",
+      "description": "Detailed description explaining WHAT to build and HOW it integrates with existing code",
       "layer": "backend|frontend|data|fullstack|devops|testing",
-      "task_type": "architecture|mock|implementation|integration",
-      "testing_criteria": "Specific, verifiable criteria to confirm this task is complete"
+      "task_type": "architecture|implementation|integration",
+      "testing_criteria": "Specific, verifiable criteria to confirm this task is complete",
+      "files_to_modify": ["path/to/file1.ts", "path/to/file2.tsx"],
+      "post_task_actions": "<markdown template - see below>"
     }}
   ]
 }}
 ```
 
+## post_task_actions Format
+MUST be markdown text that will be appended to .progress file. Include:
+- Task title as heading
+- Status with timestamp
+- Summary of what was done
+- List of files changed
+- Testing results
+- Separator line
+
 IMPORTANT:
-- Architecture tasks come FIRST
-- Mock tasks come SECOND
-- Implementation tasks reference the mocks they use
-- ONE integration task at the END
-- All tasks must reference the specific tech stack (React+Vite+Zustand, Node.js, SQLite)
+- Analyze the EXISTING project structure before generating tasks
+- Reference specific existing files that need modification in files_to_modify
+- FOLLOW THE ARCHITECTURE RULES STRICTLY - do not recreate components that already exist
+- For frontend tasks: DO NOT create new navbar/sidebar, use existing layout components
+- For backend tasks: Follow the routing, service, and model patterns
+- For database tasks: ALWAYS create migration files, run pnpm run prepare-db, never use npm run init-db
+- Database must exist before migrations run - include database creation check in architecture tasks
+- post_task_actions should be actual markdown text, not a template with placeholders
+- This markdown will be appended to .progress file when task completes
+- Include a "Rules Followed" section in post_task_actions listing which architecture rules were applied
+- Include a "Database Changes" section if migrations were created
 "#,
+            rules,
             features_json
         );
 
         let system = Some(
-            "You are a software architect generating implementation tasks using a mock-first, \
-             architecture-first approach. This enables parallel development by defining contracts first, \
-             then building mocks, then real implementations against those mocks, and finally integrating. \
-             The project uses React + Vite + Zustand for frontend, Node.js for backend, and SQLite for database. \
-             Output valid JSON only."
+            "You are a software architect analyzing an EXISTING codebase and generating implementation tasks. \
+             You must analyze the existing project structure, identify patterns, and generate tasks that work with \
+             the existing architecture. Each task should reference specific files to modify and include a markdown \
+             template for progress tracking. Use a mock-first approach where appropriate. Output valid JSON only."
                 .to_string(),
         );
 
-        let response: TaskGenerationResponse = self.claude.ask_json(&prompt, system).await?;
+        let response: TaskGenerationResponse = self.claude.ask_json_with_max_tokens(&prompt, system, 8192).await?;
         Ok(response.tasks)
     }
 
@@ -456,7 +472,6 @@ fn parse_layer(s: &str) -> Option<TaskLayer> {
 fn parse_task_type(s: &str) -> Option<TaskType> {
     match s.to_lowercase().as_str() {
         "architecture" => Some(TaskType::Architecture),
-        "mock" => Some(TaskType::Mock),
         "implementation" => Some(TaskType::Implementation),
         "integration" => Some(TaskType::Integration),
         _ => None,
@@ -466,16 +481,14 @@ fn parse_task_type(s: &str) -> Option<TaskType> {
 /// Calculate sequence number based on task type to ensure proper ordering.
 /// Sequence ranges:
 /// - Architecture: 0-99
-/// - Mock: 100-199
-/// - Implementation: 200-899
+/// - Implementation: 100-899
 /// - Integration: 900+
 fn calculate_sequence(task_type: &Option<TaskType>, task_index: usize) -> i32 {
     let base = match task_type {
         Some(TaskType::Architecture) => 0,
-        Some(TaskType::Mock) => 100,
-        Some(TaskType::Implementation) => 200,
+        Some(TaskType::Implementation) => 100,
         Some(TaskType::Integration) => 900,
-        None => 200, // Default to implementation range
+        None => 100, // Default to implementation range
     };
     base + (task_index as i32 % 100)
 }

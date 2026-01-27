@@ -1,0 +1,122 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\", project_id as \"project_id!: Uuid\", title, description, status as \"status!: TaskStatus\", parent_workspace_id as \"parent_workspace_id: Uuid\", source as \"source!: TaskSource\", layer as \"layer: TaskLayer\", task_type as \"task_type: TaskType\", sequence as \"sequence: i32\", testing_criteria, stage_started_at as \"stage_started_at: DateTime<Utc>\", complexity_score as \"complexity_score: i32\", parent_task_id as \"parent_task_id: Uuid\", prevent_breakdown as \"prevent_breakdown!: bool\", post_task_actions, created_at as \"created_at!: DateTime<Utc>\", updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM tasks\n               WHERE project_id = $1\n                 AND status = $2\n                 AND stage_started_at IS NOT NULL\n                 AND datetime(stage_started_at) < datetime('now', $3)\n               ORDER BY stage_started_at ASC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "project_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "title",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "status!: TaskStatus",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "parent_workspace_id: Uuid",
+        "ordinal": 5,
+        "type_info": "Blob"
+      },
+      {
+        "name": "source!: TaskSource",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "layer: TaskLayer",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "task_type: TaskType",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "sequence: i32",
+        "ordinal": 9,
+        "type_info": "Integer"
+      },
+      {
+        "name": "testing_criteria",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "stage_started_at: DateTime<Utc>",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "complexity_score: i32",
+        "ordinal": 12,
+        "type_info": "Integer"
+      },
+      {
+        "name": "parent_task_id: Uuid",
+        "ordinal": 13,
+        "type_info": "Blob"
+      },
+      {
+        "name": "prevent_breakdown!: bool",
+        "ordinal": 14,
+        "type_info": "Integer"
+      },
+      {
+        "name": "post_task_actions",
+        "ordinal": 15,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 16,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 17,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "88d984f11dc808109e54c99d40495c5866db25bba986fa4e4285d1c6e50ac742"
+}

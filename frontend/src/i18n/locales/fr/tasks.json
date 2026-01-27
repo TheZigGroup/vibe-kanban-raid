@@ -400,7 +400,7 @@
       "prMerged": "La PR #{{number}} est déjà fusionnée",
       "loginRequired": {
         "title": "Connectez-vous pour gérer les actions git",
-        "description": "Connectez-vous à Vibe Kanban pour pouvoir pousser des branches, fusionner des modifications ou ouvrir des pull requests pour cette tâche.",
+        "description": "Connectez-vous à ZIG RAID Dashboard pour pouvoir pousser des branches, fusionner des modifications ou ouvrir des pull requests pour cette tâche.",
         "action": "Se connecter"
       }
     },
@@ -556,12 +556,12 @@
   "showcases": {
     "taskPanel": {
       "companion": {
-        "title": "Vibe Kanban Companion - Pointer et cliquer",
+        "title": "ZIG RAID Dashboard Companion - Pointer et cliquer",
         "description": "Cliquez sur n'importe quel composant d'interface dans la fenêtre d'aperçu pour le sélectionner précisément. L'agent de codage reçoit les sélecteurs DOM exacts et la hiérarchie des composants, éliminant les retours ambigus."
       },
       "installation": {
         "title": "Installation du serveur de développement et du Companion",
-        "description": "Définissez une commande de serveur de développement pour les aperçus, avec un script de configuration paramétrable dans les options. Utilisez un agent de codage pour installer automatiquement le web companion Vibe Kanban."
+        "description": "Définissez une commande de serveur de développement pour les aperçus, avec un script de configuration paramétrable dans les options. Utilisez un agent de codage pour installer automatiquement le web companion ZIG RAID Dashboard."
       },
       "codeReview": {
         "title": "Révision de code intégrée",

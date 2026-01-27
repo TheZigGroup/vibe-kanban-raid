@@ -81,6 +81,7 @@ type TaskFormValues = {
   executorProfileId: ExecutorProfileId | null;
   repoBranches: RepoBranch[];
   autoStart: boolean;
+  preventBreakdown: boolean;
 };
 
 const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
@@ -136,6 +137,7 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
           executorProfileId: baseProfile,
           repoBranches: defaultRepoBranches,
           autoStart: false,
+          preventBreakdown: false,
         };
 
       case 'duplicate':
@@ -146,6 +148,7 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
           executorProfileId: baseProfile,
           repoBranches: defaultRepoBranches,
           autoStart: true,
+          preventBreakdown: false,
         };
 
       case 'subtask':
@@ -158,6 +161,7 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
           executorProfileId: baseProfile,
           repoBranches: defaultRepoBranches,
           autoStart: true,
+          preventBreakdown: false,
         };
     }
   }, [mode, props, system.config?.executor_profile, defaultRepoBranches]);
@@ -191,8 +195,11 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
         image_ids: imageIds,
         source: null,
         layer: null,
+        task_type: null,
         sequence: null,
         testing_criteria: null,
+        parent_task_id: null,
+        prevent_breakdown: value.preventBreakdown || null,
       };
       const shouldAutoStart = value.autoStart && !forceCreateOnlyRef.current;
       if (shouldAutoStart) {
@@ -623,6 +630,30 @@ const TaskFormDialogImpl = NiceModal.create<TaskFormDialogProps>((props) => {
                 <ImageIcon className="h-4 w-4" />
               </Button>
             </div>
+
+            {/* Prevent breakdown switch */}
+            {!editMode && (
+              <form.Field name="preventBreakdown">
+                {(field) => (
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="prevent-breakdown-switch"
+                      checked={field.state.value}
+                      onCheckedChange={(checked) => field.handleChange(checked)}
+                      disabled={isSubmitting}
+                      className="data-[state=checked]:bg-gray-900 dark:data-[state=checked]:bg-gray-100"
+                      aria-label={t('taskFormDialog.preventBreakdownLabel')}
+                    />
+                    <Label
+                      htmlFor="prevent-breakdown-switch"
+                      className="text-sm cursor-pointer"
+                    >
+                      {t('taskFormDialog.preventBreakdown')}
+                    </Label>
+                  </div>
+                )}
+              </form.Field>
+            )}
 
             {/* Autostart switch */}
             <div className="flex items-center gap-3">

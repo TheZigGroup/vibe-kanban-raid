@@ -9,11 +9,12 @@ use db::{
         review_automation::{
             ProjectReviewSettings, ReviewAction, ReviewAutomationLog, ReviewAutomationStatus,
         },
-        task::{Task, TaskStatus},
+        task::{CreateTask, Task, TaskLayer, TaskStatus},
         workspace::Workspace,
         workspace_repo::WorkspaceRepo,
     },
 };
+use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use thiserror::Error;
 use tokio::{process::Command, time::interval};
@@ -21,6 +22,25 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use super::{git::GitService, notification::NotificationService};
+use super::claude_api::{ClaudeApiClient, ClaudeApiError};
+
+/// Maximum number of merge conflict attempts before cancelling and breaking down the task
+const MAX_MERGE_CONFLICT_ATTEMPTS: i64 = 5;
+
+/// Response from AI for breaking down a conflicting task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ConflictBreakdownResponse {
+    subtasks: Vec<SubtaskSuggestion>,
+    reasoning: String,
+}
+
+/// Suggested subtask from AI breakdown
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SubtaskSuggestion {
+    title: String,
+    description: String,
+    layer: Option<String>,
+}
 
 #[derive(Debug, Error)]
 pub enum ReviewAutomationError {
@@ -80,7 +100,7 @@ impl ReviewAutomationService {
             db,
             git_service,
             notification_service,
-            poll_interval: Duration::from_secs(60), // Check every minute
+            poll_interval: Duration::from_secs(10), // Check every 10 seconds for faster response
         };
         tokio::spawn(async move {
             service.start().await;
@@ -265,20 +285,108 @@ impl ReviewAutomationService {
                     return Ok(ReviewAction::MergeCompleted);
                 }
                 Err(ReviewAutomationError::MergeConflict(msg)) => {
+                    // Log the conflict with detailed information
                     ReviewAutomationLog::create(
                         &self.db.pool,
                         task.id,
                         workspace.id,
                         ReviewAction::MergeConflict,
                         None,
-                        Some(msg.clone()),
+                        Some(format!(
+                            "Merge conflict detected. Details: {}",
+                            msg
+                        )),
                     )
                     .await?;
+
+                    // Check how many times this task has had merge conflicts
+                    let conflict_count = ReviewAutomationLog::count_merge_conflicts(
+                        &self.db.pool,
+                        task.id,
+                    )
+                    .await?;
+
+                    if conflict_count >= MAX_MERGE_CONFLICT_ATTEMPTS {
+                        // Too many failures - cancel task and break it down into simpler subtasks
+                        info!(
+                            task_id = %task.id,
+                            conflict_count = conflict_count,
+                            "Review automation: max merge conflicts reached, cancelling and breaking down task"
+                        );
+
+                        // Cancel the original task
+                        Task::update_status(&self.db.pool, task.id, TaskStatus::Cancelled).await?;
+
+                        // Archive the workspace
+                        Workspace::set_archived(&self.db.pool, workspace.id, true).await?;
+
+                        // Try to break down the task into simpler subtasks
+                        match self.breakdown_conflicting_task(&task, &msg).await {
+                            Ok(subtask_count) => {
+                                self.notification_service
+                                    .notify(
+                                        "Review Automation",
+                                        &format!(
+                                            "Task '{}' cancelled after {} merge conflicts. Created {} simpler subtasks.",
+                                            task.title, conflict_count, subtask_count
+                                        ),
+                                    )
+                                    .await;
+
+                                ReviewAutomationLog::create(
+                                    &self.db.pool,
+                                    task.id,
+                                    workspace.id,
+                                    ReviewAction::Error,
+                                    None,
+                                    Some(format!(
+                                        "Task cancelled after {} merge conflicts. Broken down into {} simpler subtasks.",
+                                        conflict_count, subtask_count
+                                    )),
+                                )
+                                .await?;
+                            }
+                            Err(e) => {
+                                warn!(
+                                    task_id = %task.id,
+                                    error = %e,
+                                    "Failed to break down conflicting task"
+                                );
+
+                                self.notification_service
+                                    .notify(
+                                        "Review Automation",
+                                        &format!(
+                                            "Task '{}' cancelled after {} merge conflicts. Manual breakdown required.",
+                                            task.title, conflict_count
+                                        ),
+                                    )
+                                    .await;
+                            }
+                        }
+
+                        return Ok(ReviewAction::MergeConflict);
+                    }
+
+                    // Move task back to InProgress so the agent can resolve conflicts
+                    // This mirrors what happens when user clicks "Resolve Conflicts"
+                    Task::update_status(&self.db.pool, task.id, TaskStatus::InProgress).await?;
+
+                    info!(
+                        task_id = %task.id,
+                        workspace_id = %workspace.id,
+                        conflict_count = conflict_count,
+                        "Review automation: merge conflict #{}, moved task back to InProgress",
+                        conflict_count
+                    );
 
                     self.notification_service
                         .notify(
                             "Review Automation",
-                            &format!("Merge conflict for task: {}", task.title),
+                            &format!(
+                                "Merge conflict #{} for '{}'. Task moved back to InProgress for conflict resolution. ({} attempts remaining)",
+                                conflict_count, task.title, MAX_MERGE_CONFLICT_ATTEMPTS - conflict_count
+                            ),
                         )
                         .await;
 
@@ -391,6 +499,7 @@ impl ReviewAutomationService {
     }
 
     /// Attempt to auto-merge the workspace branch into target branches
+    /// If the base branch has moved ahead, automatically rebase and retry
     async fn attempt_auto_merge(
         &self,
         task: &Task,
@@ -441,13 +550,15 @@ impl ReviewAutomationService {
             // Perform the merge
             let commit_message = format!("Merge {} into {}\n\nTask: {}", workspace.branch, target_branch, task.title);
 
-            match self.git_service.merge_changes(
+            let merge_result = self.git_service.merge_changes(
                 repo_path,
                 &task_worktree_path,
                 &workspace.branch,
                 target_branch,
                 &commit_message,
-            ) {
+            );
+
+            match merge_result {
                 Ok(merge_commit) => {
                     info!(
                         workspace_id = %workspace.id,
@@ -466,10 +577,99 @@ impl ReviewAutomationService {
                     )
                     .await?;
                 }
-                Err(super::git::GitServiceError::MergeConflicts(msg)) => {
-                    return Err(ReviewAutomationError::MergeConflict(msg));
+                Err(super::git::GitServiceError::BranchesDiverged(_)) => {
+                    // Base branch has moved ahead - try to rebase and merge
+                    info!(
+                        workspace_id = %workspace.id,
+                        repo_id = %repo.id,
+                        branch = %workspace.branch,
+                        target_branch = %target_branch,
+                        "Review automation: base branch diverged, attempting rebase"
+                    );
+
+                    // Get the fork point (old base) for rebase
+                    let fork_point = match self.git_service.get_fork_point(
+                        &task_worktree_path,
+                        target_branch,
+                        &workspace.branch,
+                    ) {
+                        Ok(fp) => fp,
+                        Err(e) => {
+                            return Err(ReviewAutomationError::MergeConflict(format!(
+                                "Could not determine fork point for rebase: {}",
+                                e
+                            )));
+                        }
+                    };
+
+                    // Attempt rebase onto new base
+                    match self.git_service.rebase_branch(
+                        repo_path,
+                        &task_worktree_path,
+                        target_branch,
+                        &fork_point,
+                        &workspace.branch,
+                    ) {
+                        Ok(new_head) => {
+                            info!(
+                                workspace_id = %workspace.id,
+                                repo_id = %repo.id,
+                                new_head = %new_head,
+                                "Review automation: rebase successful, retrying merge"
+                            );
+
+                            // Retry the merge after successful rebase
+                            match self.git_service.merge_changes(
+                                repo_path,
+                                &task_worktree_path,
+                                &workspace.branch,
+                                target_branch,
+                                &commit_message,
+                            ) {
+                                Ok(merge_commit) => {
+                                    info!(
+                                        workspace_id = %workspace.id,
+                                        repo_id = %repo.id,
+                                        merge_commit = %merge_commit,
+                                        "Review automation: merge successful after rebase"
+                                    );
+
+                                    Merge::create_direct(
+                                        &self.db.pool,
+                                        workspace.id,
+                                        repo.id,
+                                        target_branch,
+                                        &merge_commit,
+                                    )
+                                    .await?;
+                                }
+                                Err(e) => {
+                                    return Err(ReviewAutomationError::MergeConflict(format!(
+                                        "Merge failed after rebase: {}",
+                                        e
+                                    )));
+                                }
+                            }
+                        }
+                        Err(super::git::GitServiceError::MergeConflicts(msg)) => {
+                            // Rebase had conflicts - abort and report
+                            let _ = self.git_service.abort_conflicts(&task_worktree_path);
+                            return Err(ReviewAutomationError::MergeConflict(format!(
+                                "Automatic rebase failed due to conflicts. Manual intervention required. {}",
+                                msg
+                            )));
+                        }
+                        Err(e) => {
+                            // Rebase failed for other reasons - abort and report
+                            let _ = self.git_service.abort_conflicts(&task_worktree_path);
+                            return Err(ReviewAutomationError::MergeConflict(format!(
+                                "Automatic rebase failed: {}",
+                                e
+                            )));
+                        }
+                    }
                 }
-                Err(super::git::GitServiceError::BranchesDiverged(msg)) => {
+                Err(super::git::GitServiceError::MergeConflicts(msg)) => {
                     return Err(ReviewAutomationError::MergeConflict(msg));
                 }
                 Err(e) => {
@@ -521,5 +721,130 @@ impl ReviewAutomationService {
         limit: i32,
     ) -> Result<Vec<ReviewAutomationLog>, ReviewAutomationError> {
         Ok(ReviewAutomationLog::find_by_project_id(pool, project_id, limit).await?)
+    }
+
+    /// Get review automation logs for a specific task
+    pub async fn get_logs_by_task(
+        pool: &SqlitePool,
+        task_id: Uuid,
+    ) -> Result<Vec<ReviewAutomationLog>, ReviewAutomationError> {
+        Ok(ReviewAutomationLog::find_by_task_id(pool, task_id).await?)
+    }
+
+    /// Break down a task that has failed to merge too many times into simpler subtasks
+    async fn breakdown_conflicting_task(
+        &self,
+        task: &Task,
+        conflict_details: &str,
+    ) -> Result<usize, ReviewAutomationError> {
+        let claude = ClaudeApiClient::from_env()
+            .map_err(|e: ClaudeApiError| ReviewAutomationError::CommandFailed(e.to_string()))?;
+
+        let prompt = format!(
+            r#"A software development task has failed to merge {max_attempts} times due to conflicts.
+The task needs to be broken down into smaller, simpler subtasks that are less likely to cause conflicts.
+
+## Original Task
+Title: {title}
+Description: {description}
+Layer: {layer}
+Type: {task_type}
+
+## Conflict Details
+{conflict_details}
+
+## Requirements
+1. Break this task into 2-4 smaller, independent subtasks
+2. Each subtask should be small enough to avoid merge conflicts
+3. Subtasks should be able to be completed and merged independently
+4. Focus on making atomic, isolated changes
+
+## Output Format (JSON only):
+{{
+  "subtasks": [
+    {{"title": "<subtask title>", "description": "<clear description of what to do>", "layer": "<data|backend|frontend|null>"}},
+    ...
+  ],
+  "reasoning": "<brief explanation of how you split the task>"
+}}"#,
+            max_attempts = MAX_MERGE_CONFLICT_ATTEMPTS,
+            title = task.title,
+            description = task.description.as_deref().unwrap_or("(no description)"),
+            layer = task.layer.as_ref().map(|l| l.to_string()).unwrap_or_else(|| "unspecified".to_string()),
+            task_type = task.task_type.as_ref().map(|t| t.to_string()).unwrap_or_else(|| "implementation".to_string()),
+            conflict_details = conflict_details,
+        );
+
+        let system = Some(
+            "You are a task breakdown assistant. Break complex tasks into smaller, independent pieces that can be merged without conflicts. Output valid JSON only.".to_string()
+        );
+
+        let response: ConflictBreakdownResponse = claude
+            .ask_json::<ConflictBreakdownResponse>(&prompt, system)
+            .await
+            .map_err(|e: ClaudeApiError| ReviewAutomationError::CommandFailed(e.to_string()))?;
+
+        if response.subtasks.is_empty() || response.subtasks.len() < 2 {
+            return Err(ReviewAutomationError::CommandFailed(
+                "AI did not suggest enough subtasks for breakdown".to_string(),
+            ));
+        }
+
+        let mut created_count = 0;
+        let base_sequence = task.sequence.unwrap_or(1);
+
+        for (i, subtask) in response.subtasks.iter().enumerate() {
+            let layer: Option<TaskLayer> = subtask.layer.as_ref().and_then(|l: &String| {
+                match l.to_lowercase().as_str() {
+                    "data" => Some(TaskLayer::Data),
+                    "backend" => Some(TaskLayer::Backend),
+                    "frontend" => Some(TaskLayer::Frontend),
+                    "fullstack" => Some(TaskLayer::Fullstack),
+                    "devops" => Some(TaskLayer::Devops),
+                    "testing" => Some(TaskLayer::Testing),
+                    _ => task.layer.clone(),
+                }
+            }).or_else(|| task.layer.clone());
+
+            let create_task = CreateTask::subtask_of(
+                task.project_id,
+                subtask.title.clone(),
+                Some(subtask.description.clone()),
+                layer,
+                task.task_type.clone(),
+                base_sequence * 10 + (i as i32) + 1,
+                task.testing_criteria.clone(),
+                None,
+                task.id,
+            );
+
+            match Task::create(&self.db.pool, &create_task, Uuid::new_v4()).await {
+                Ok(new_task) => {
+                    info!(
+                        parent_task_id = %task.id,
+                        subtask_id = %new_task.id,
+                        subtask_title = %new_task.title,
+                        "Review automation: created subtask from conflicting task"
+                    );
+                    created_count += 1;
+                }
+                Err(e) => {
+                    warn!(
+                        parent_task_id = %task.id,
+                        error = %e,
+                        "Failed to create subtask"
+                    );
+                }
+            }
+        }
+
+        info!(
+            task_id = %task.id,
+            created_count = created_count,
+            reasoning = %response.reasoning,
+            "Review automation: task broken down after merge conflicts"
+        );
+
+        Ok(created_count)
     }
 }

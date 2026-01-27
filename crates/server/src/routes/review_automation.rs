@@ -16,6 +16,15 @@ use uuid::Uuid;
 
 use crate::{DeploymentImpl, error::ApiError};
 
+/// Get review automation logs for a specific task
+pub async fn get_review_automation_logs_by_task(
+    State(deployment): State<DeploymentImpl>,
+    Path(task_id): Path<Uuid>,
+) -> Result<ResponseJson<ApiResponse<Vec<ReviewAutomationLog>>>, ApiError> {
+    let logs = ReviewAutomationService::get_logs_by_task(&deployment.db().pool, task_id).await?;
+    Ok(ResponseJson(ApiResponse::success(logs)))
+}
+
 /// Enable review automation for a project
 pub async fn enable_review_automation(
     State(deployment): State<DeploymentImpl>,
@@ -73,12 +82,17 @@ pub async fn get_review_automation_logs(
 }
 
 pub fn router(_deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
-    Router::new().nest(
-        "/projects/{project_id}/review-automation",
-        Router::new()
-            .route("/enable", post(enable_review_automation))
-            .route("/disable", post(disable_review_automation))
-            .route("/status", get(get_review_automation_status))
-            .route("/logs", get(get_review_automation_logs)),
-    )
+    Router::new()
+        .nest(
+            "/projects/{project_id}/review-automation",
+            Router::new()
+                .route("/enable", post(enable_review_automation))
+                .route("/disable", post(disable_review_automation))
+                .route("/status", get(get_review_automation_status))
+                .route("/logs", get(get_review_automation_logs)),
+        )
+        .route(
+            "/tasks/{task_id}/review-logs",
+            get(get_review_automation_logs_by_task),
+        )
 }

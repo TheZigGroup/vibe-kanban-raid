@@ -44,15 +44,15 @@ export type TaskSource = "manual" | "ai_generated";
 
 export type TaskLayer = "data" | "backend" | "frontend" | "fullstack" | "devops" | "testing";
 
-export type TaskType = "architecture" | "mock" | "implementation" | "integration";
+export type TaskType = "architecture" | "implementation" | "integration";
 
-export type Task = { id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, source: TaskSource, layer: TaskLayer | null, task_type: TaskType | null, sequence: number | null, testing_criteria: string | null, created_at: string, updated_at: string, };
+export type Task = { id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, source: TaskSource, layer: TaskLayer | null, task_type: TaskType | null, sequence: number | null, testing_criteria: string | null, stage_started_at: string | null, complexity_score: number | null, parent_task_id: string | null, prevent_breakdown: boolean, post_task_actions: string | null, created_at: string, updated_at: string, };
 
-export type TaskWithAttemptStatus = { has_in_progress_attempt: boolean, last_attempt_failed: boolean, executor: string, id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, source: TaskSource, layer: TaskLayer | null, task_type: TaskType | null, sequence: number | null, testing_criteria: string | null, created_at: string, updated_at: string, };
+export type TaskWithAttemptStatus = { has_in_progress_attempt: boolean, last_attempt_failed: boolean, executor: string, id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, source: TaskSource, layer: TaskLayer | null, task_type: TaskType | null, sequence: number | null, testing_criteria: string | null, stage_started_at: string | null, complexity_score: number | null, parent_task_id: string | null, prevent_breakdown: boolean, post_task_actions: string | null, created_at: string, updated_at: string, };
 
 export type TaskRelationships = { parent_task: Task | null, current_workspace: Workspace, children: Array<Task>, };
 
-export type CreateTask = { project_id: string, title: string, description: string | null, status: TaskStatus | null, parent_workspace_id: string | null, image_ids: Array<string> | null, source: TaskSource | null, layer: TaskLayer | null, task_type: TaskType | null, sequence: number | null, testing_criteria: string | null, };
+export type CreateTask = { project_id: string, title: string, description: string | null, status: TaskStatus | null, parent_workspace_id: string | null, image_ids: Array<string> | null, source: TaskSource | null, layer: TaskLayer | null, task_type: TaskType | null, sequence: number | null, testing_criteria: string | null, parent_task_id: string | null, prevent_breakdown: boolean | null, post_task_actions: string | null, };
 
 export type UpdateTask = { title: string | null, description: string | null, status: TaskStatus | null, parent_workspace_id: string | null, image_ids: Array<string> | null, };
 
@@ -68,9 +68,9 @@ export type CreateProjectRequirements = { raw_requirements: string, prd_content:
 
 export type ProjectRequirementsStatus = { id: string, project_id: string, generation_status: GenerationStatus, analysis_result: AnalysisResult | null, tasks_generated: number | null, error_message: string | null, created_at: string, updated_at: string, };
 
-export type AgentAction = "selected" | "skipped" | "error";
+export type AgentAction = "selected" | "skipped" | "error" | "replaced" | "timeout";
 
-export type ProjectAgentSettings = { id: string, project_id: string, enabled: boolean, interval_seconds: number, created_at: string, updated_at: string, };
+export type ProjectAgentSettings = { id: string, project_id: string, enabled: boolean, interval_seconds: number, max_breakdown_depth: number, created_at: string, updated_at: string, };
 
 export type AgentActivityLog = { id: string, project_id: string, task_id: string | null, action: AgentAction, reasoning: string | null, created_at: string, };
 

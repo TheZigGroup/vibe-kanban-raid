@@ -14,6 +14,8 @@ pub enum AgentAction {
     Selected,
     Skipped,
     Error,
+    Replaced, // Task was broken into subtasks
+    Timeout,  // Task was cancelled due to timeout
 }
 
 /// Agent activity settings for a project
@@ -23,6 +25,7 @@ pub struct ProjectAgentSettings {
     pub project_id: Uuid,
     pub enabled: bool,
     pub interval_seconds: i32,
+    pub max_breakdown_depth: i32, // Recursive breakdown depth (default: 1)
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -68,6 +71,7 @@ impl ProjectAgentSettings {
                 project_id as "project_id!: Uuid",
                 enabled as "enabled!: bool",
                 interval_seconds as "interval_seconds!: i32",
+                max_breakdown_depth as "max_breakdown_depth!: i32",
                 created_at as "created_at!: DateTime<Utc>",
                 updated_at as "updated_at!: DateTime<Utc>"
             FROM project_agent_settings
@@ -98,6 +102,7 @@ impl ProjectAgentSettings {
                 project_id as "project_id!: Uuid",
                 enabled as "enabled!: bool",
                 interval_seconds as "interval_seconds!: i32",
+                max_breakdown_depth as "max_breakdown_depth!: i32",
                 created_at as "created_at!: DateTime<Utc>",
                 updated_at as "updated_at!: DateTime<Utc>""#,
             id,
@@ -126,6 +131,7 @@ impl ProjectAgentSettings {
                 project_id as "project_id!: Uuid",
                 enabled as "enabled!: bool",
                 interval_seconds as "interval_seconds!: i32",
+                max_breakdown_depth as "max_breakdown_depth!: i32",
                 created_at as "created_at!: DateTime<Utc>",
                 updated_at as "updated_at!: DateTime<Utc>"
             FROM project_agent_settings

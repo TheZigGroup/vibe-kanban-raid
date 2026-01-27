@@ -11,7 +11,7 @@ use db::{
             ProjectAgentSettings,
         },
         project_repo::ProjectRepo,
-        task::{Task, TaskStatus, TaskWithAttemptStatus},
+        task::{CreateTask, Task, TaskLayer, TaskStatus, TaskType, TaskWithAttemptStatus},
         workspace::{CreateWorkspace, Workspace},
         workspace_repo::{CreateWorkspaceRepo, WorkspaceRepo},
     },
@@ -77,7 +77,25 @@ struct TaskInfo {
     title: String,
     description: Option<String>,
     layer: Option<String>,
+    task_type: Option<String>,
     sequence: Option<i32>,
+}
+
+/// Response from AI complexity analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ComplexityAnalysisResponse {
+    complexity_score: i32,
+    can_be_broken_down: bool,
+    reasoning: String,
+    subtasks: Option<Vec<SubtaskSuggestion>>,
+}
+
+/// Suggested subtask from AI complexity analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SubtaskSuggestion {
+    title: String,
+    description: String,
+    layer: Option<String>,
 }
 
 /// Configuration for auto-attempt feature
@@ -105,7 +123,7 @@ impl AgentActivityService {
         let service = Self {
             db,
             notification_service,
-            poll_interval: Duration::from_secs(60), // Check every minute
+            poll_interval: Duration::from_secs(10), // Check every 10 seconds for faster response
             auto_attempt,
         };
         tokio::spawn(async move {
@@ -196,6 +214,27 @@ impl AgentActivityService {
 }
 
 impl AgentActivityService {
+    /// Get layers that already have running non-Integration tasks
+    /// (layers with InProgress or InReview tasks that are NOT Integration type)
+    fn get_active_layers(tasks: &[TaskWithAttemptStatus]) -> Vec<TaskLayer> {
+        tasks
+            .iter()
+            .filter(|t| {
+                t.task_type != Some(TaskType::Integration)
+                    && (t.status == TaskStatus::InProgress || t.status == TaskStatus::InReview)
+            })
+            .filter_map(|t| t.layer.clone())
+            .collect()
+    }
+
+    /// Check if there's an active Integration task
+    fn has_active_integration_task(tasks: &[TaskWithAttemptStatus]) -> bool {
+        tasks.iter().any(|t| {
+            t.task_type == Some(TaskType::Integration)
+                && (t.status == TaskStatus::InProgress || t.status == TaskStatus::InReview)
+        })
+    }
+
     /// Main entry point: check conditions and select next task if applicable
     pub async fn check_and_select_next_task(
         pool: &SqlitePool,
@@ -206,53 +245,212 @@ impl AgentActivityService {
         // Get all tasks for the project to check status
         let all_tasks = Task::find_by_project_id_with_attempt_status(pool, project_id).await?;
 
-        // Check if any task is in progress or in review status
-        // Skip auto-selection when work is actively being done or reviewed
-        let has_active_task = all_tasks
-            .iter()
-            .any(|t| t.status == TaskStatus::InProgress || t.status == TaskStatus::InReview);
+        // First, check for any Fullstack tasks that need to be broken down
+        for task in all_tasks.iter() {
+            if task.status == TaskStatus::Todo && task.layer == Some(TaskLayer::Fullstack) {
+                if let Some(task_full) = Task::find_by_id(pool, task.id).await? {
+                    info!(
+                        task_id = %task.id,
+                        "Agent activity: breaking down Fullstack task into layers"
+                    );
+                    if let Ok(created_count) =
+                        Self::breakdown_fullstack_task(pool, &task_full, project_id).await
+                    {
+                        if created_count > 0 {
+                            AgentActivityLog::create(
+                                pool,
+                                project_id,
+                                Some(task.id),
+                                AgentAction::Replaced,
+                                Some(format!(
+                                    "Fullstack task broken into {} layer-specific subtasks",
+                                    created_count
+                                )),
+                            )
+                            .await?;
 
-        if has_active_task {
+                            notification_service
+                                .notify(
+                                    "Task Breakdown",
+                                    &format!(
+                                        "Fullstack task '{}' split into {} subtasks",
+                                        task.title, created_count
+                                    ),
+                                )
+                                .await;
+
+                            return Ok(AgentTriggerResponse {
+                                action: AgentAction::Replaced,
+                                task_id: Some(task.id),
+                                reasoning: Some(format!(
+                                    "Fullstack task broken into {} layer-specific subtasks",
+                                    created_count
+                                )),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Get active layers (layers with InProgress/InReview non-Integration tasks)
+        let active_layers = Self::get_active_layers(&all_tasks);
+        let active_layer_count = active_layers.len();
+        let has_active_integration = Self::has_active_integration_task(&all_tasks);
+
+        // Concurrency rules:
+        // 1. Non-Integration tasks can run concurrently by layer (up to 3: Frontend, Backend, Data)
+        // 2. Integration tasks run sequentially (only when nothing else is in progress)
+        // 3. Mock tasks take priority over Implementation tasks
+        // 4. If an Integration task is active, block everything else
+
+        // If there's an active Integration task, block all new tasks
+        if has_active_integration {
             return Err(AgentActivityError::TaskAlreadyInProgress);
         }
 
-        // Filter to only todo tasks and convert to Task for AI selection
-        let tasks: Vec<TaskWithAttemptStatus> = all_tasks
-            .into_iter()
-            .filter(|t| t.status == TaskStatus::Todo)
-            .collect();
+        // Check for available non-Integration tasks that can run (in a layer not already active)
+        let has_available_layered_task = all_tasks.iter().any(|t| {
+            t.status == TaskStatus::Todo
+                && t.task_type != Some(TaskType::Integration)
+                && t.layer
+                    .as_ref()
+                    .map(|l| !active_layers.contains(l))
+                    .unwrap_or(false) // Must have a layer for concurrent execution
+        });
+
+        // Check if there's any active task
+        let has_any_active_task = all_tasks
+            .iter()
+            .any(|t| t.status == TaskStatus::InProgress || t.status == TaskStatus::InReview);
+
+        let tasks: Vec<TaskWithAttemptStatus> = if has_available_layered_task && active_layer_count < 3 {
+            // Can start a non-Integration task in an available layer
+            info!(
+                project_id = %project_id,
+                active_layer_count = active_layer_count,
+                "Agent activity: selecting layered task (concurrent by layer allowed)"
+            );
+
+            // Get all eligible non-Integration tasks in available layers
+            let eligible: Vec<TaskWithAttemptStatus> = all_tasks
+                .clone()
+                .into_iter()
+                .filter(|t| {
+                    t.status == TaskStatus::Todo
+                        && t.task_type != Some(TaskType::Integration)
+                        && t.layer
+                            .as_ref()
+                            .map(|l| !active_layers.contains(l))
+                            .unwrap_or(false)
+                })
+                .collect();
+
+            // Prioritize: Architecture > Implementation
+            let has_arch = eligible.iter().any(|t| t.task_type == Some(TaskType::Architecture));
+
+            if has_arch {
+                eligible.into_iter().filter(|t| t.task_type == Some(TaskType::Architecture)).collect()
+            } else {
+                eligible
+            }
+        } else if has_any_active_task {
+            // Something is active and we can't start more layered tasks - block
+            return Err(AgentActivityError::TaskAlreadyInProgress);
+        } else {
+            // Nothing active - can start any todo task
+            // Priority: Sequence 1 (init) > Architecture > Mock > Implementation > Integration
+            let todo_tasks: Vec<TaskWithAttemptStatus> = all_tasks
+                .into_iter()
+                .filter(|t| t.status == TaskStatus::Todo)
+                .collect();
+
+            // CRITICAL: Initialization tasks (sequence=1) have highest priority
+            // These set up the project to be runnable
+            let has_init = todo_tasks.iter().any(|t| t.sequence == Some(1));
+            let has_arch = todo_tasks.iter().any(|t| t.task_type == Some(TaskType::Architecture));
+            let has_impl = todo_tasks.iter().any(|t| t.task_type == Some(TaskType::Implementation));
+
+            if has_init {
+                // Sequence 1 tasks are initialization - do these first!
+                todo_tasks.into_iter().filter(|t| t.sequence == Some(1)).collect()
+            } else if has_arch {
+                // Architecture tasks set up structure
+                todo_tasks.into_iter().filter(|t| t.task_type == Some(TaskType::Architecture)).collect()
+            } else if has_impl {
+                todo_tasks.into_iter().filter(|t| t.task_type == Some(TaskType::Implementation)).collect()
+            } else {
+                // Only Integration tasks left
+                todo_tasks
+            }
+        };
 
         if tasks.is_empty() {
-            // Log the skip
             AgentActivityLog::create(
                 pool,
                 project_id,
                 None,
                 AgentAction::Skipped,
-                Some("No todo tasks available".to_string()),
+                Some("No eligible tasks available".to_string()),
             )
             .await?;
 
             return Ok(AgentTriggerResponse {
                 action: AgentAction::Skipped,
                 task_id: None,
-                reasoning: Some("No todo tasks available".to_string()),
+                reasoning: Some("No eligible tasks available".to_string()),
             });
         }
 
         info!(
             project_id = %project_id,
             todo_count = tasks.len(),
-            "Agent activity: found todo tasks, using AI to select next task"
+            "Agent activity: found eligible tasks, using AI to select next task"
         );
 
         // Use AI to select the best task
         match Self::select_task_with_ai(&tasks).await {
             Ok((task_id, reasoning)) => {
-                // Update task status to in progress
+                let task = Task::find_by_id(pool, task_id)
+                    .await?
+                    .ok_or(AgentActivityError::NoTasksAvailable)?;
+
+                // Check complexity (skip for subtasks and tasks with prevent_breakdown flag)
+                if task.complexity_score.is_none()
+                    && task.parent_task_id.is_none()
+                    && !task.prevent_breakdown
+                {
+                    match Self::analyze_complexity_and_maybe_breakdown(
+                        pool,
+                        &task,
+                        project_id,
+                        notification_service,
+                    )
+                    .await
+                    {
+                        Ok(Some(subtask_count)) => {
+                            return Ok(AgentTriggerResponse {
+                                action: AgentAction::Replaced,
+                                task_id: Some(task_id),
+                                reasoning: Some(format!(
+                                    "Complex task broken into {} subtasks",
+                                    subtask_count
+                                )),
+                            });
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            warn!(
+                                task_id = %task_id,
+                                error = %e,
+                                "Complexity analysis failed, proceeding with task anyway"
+                            );
+                        }
+                    }
+                }
+
                 Task::update_status(pool, task_id, TaskStatus::InProgress).await?;
 
-                // Log the selection
                 AgentActivityLog::create(
                     pool,
                     project_id,
@@ -262,32 +460,19 @@ impl AgentActivityService {
                 )
                 .await?;
 
-                // Get the task for notifications and auto-attempt
-                let task = Task::find_by_id(pool, task_id).await?;
+                notification_service
+                    .notify("Task Selected", &format!("Starting: {}", task.title))
+                    .await;
 
-                // Send notification
-                if let Some(ref task) = task {
-                    notification_service
-                        .notify("Task Selected", &format!("Starting: {}", task.title))
-                        .await;
-                }
-
-                // Auto-attempt: create and start workspace if configured
-                if let (Some(auto_attempt_config), Some(task)) = (auto_attempt, task) {
-                    if let Err(e) = Self::auto_start_attempt(
-                        pool,
-                        &task,
-                        project_id,
-                        auto_attempt_config,
-                    )
-                    .await
+                if let Some(auto_attempt_config) = auto_attempt {
+                    if let Err(e) =
+                        Self::auto_start_attempt(pool, &task, project_id, auto_attempt_config).await
                     {
                         warn!(
                             task_id = %task_id,
                             error = %e,
                             "Failed to auto-start attempt for task"
                         );
-                        // Don't fail the whole operation, just log
                     } else {
                         info!(task_id = %task_id, "Auto-started attempt for selected task");
                     }
@@ -300,7 +485,6 @@ impl AgentActivityService {
                 })
             }
             Err(e) => {
-                // Log the error
                 AgentActivityLog::create(
                     pool,
                     project_id,
@@ -313,6 +497,181 @@ impl AgentActivityService {
                 Err(e)
             }
         }
+    }
+
+    /// Break down a Fullstack task into Frontend, Backend, and Data subtasks
+    async fn breakdown_fullstack_task(
+        pool: &SqlitePool,
+        task: &Task,
+        _project_id: Uuid,
+    ) -> Result<usize, AgentActivityError> {
+        let layers = [TaskLayer::Data, TaskLayer::Backend, TaskLayer::Frontend];
+        let layer_names = ["Data", "Backend", "Frontend"];
+        let mut created_count = 0;
+
+        for (layer, name) in layers.iter().zip(layer_names.iter()) {
+            let subtask_title = format!("{} - {} Layer", task.title, name);
+            let subtask_description = task.description.clone().map(|d| {
+                format!(
+                    "{}\n\n[Auto-generated {} layer subtask from Fullstack task]",
+                    d, name
+                )
+            });
+
+            let create_data = CreateTask::subtask_of(
+                task.project_id,
+                subtask_title,
+                subtask_description,
+                Some(layer.clone()),
+                task.task_type.clone(),
+                task.sequence.unwrap_or(0),
+                task.testing_criteria.clone(),
+                None,
+                task.id,
+            );
+
+            Task::create(pool, &create_data, Uuid::new_v4()).await?;
+            created_count += 1;
+        }
+
+        // Cancel the original Fullstack task
+        Task::update_status(pool, task.id, TaskStatus::Cancelled).await?;
+
+        Ok(created_count)
+    }
+
+    /// Analyze task complexity using AI and break down if needed
+    /// Returns Some(count) if task was broken down, None otherwise
+    async fn analyze_complexity_and_maybe_breakdown(
+        pool: &SqlitePool,
+        task: &Task,
+        project_id: Uuid,
+        notification_service: &NotificationService,
+    ) -> Result<Option<usize>, AgentActivityError> {
+        let claude = ClaudeApiClient::from_env()?;
+
+        let prompt = format!(
+            r#"Analyze the complexity of this software development task:
+
+## Task
+Title: {}
+Description: {}
+Layer: {}
+Type: {}
+
+## Criteria for High Complexity (score >= 7):
+- Would take > 4 hours of work
+- Touches > 3 files/components
+- Has unclear boundaries
+- Can be split into independently testable parts
+- Requires multiple distinct implementation steps
+
+## Output Format (JSON only):
+{{
+  "complexity_score": <1-10>,
+  "can_be_broken_down": <true/false>,
+  "reasoning": "<brief explanation>",
+  "subtasks": [
+    {{"title": "<subtask title>", "description": "<what to do>", "layer": "<data|backend|frontend|null>"}},
+    ...
+  ]
+}}
+
+If complexity_score < 7 or can_be_broken_down is false, subtasks can be empty array.
+Limit to 2-4 subtasks maximum if breaking down."#,
+            task.title,
+            task.description.as_deref().unwrap_or("(no description)"),
+            task.layer
+                .as_ref()
+                .map(|l| l.to_string())
+                .unwrap_or_else(|| "unspecified".to_string()),
+            task.task_type
+                .as_ref()
+                .map(|t| t.to_string())
+                .unwrap_or_else(|| "implementation".to_string()),
+        );
+
+        let system = Some(
+            "You are a software project complexity analyzer. Analyze tasks and suggest breakdowns for complex work. Output valid JSON only.".to_string()
+        );
+
+        let analysis: ComplexityAnalysisResponse = claude.ask_json(&prompt, system).await?;
+
+        // Store complexity score
+        Task::update_complexity_score(pool, task.id, analysis.complexity_score).await?;
+
+        info!(
+            task_id = %task.id,
+            complexity_score = analysis.complexity_score,
+            can_breakdown = analysis.can_be_broken_down,
+            "Agent activity: complexity analysis complete"
+        );
+
+        // Check if we should break down
+        if analysis.complexity_score >= 7
+            && analysis.can_be_broken_down
+            && analysis.subtasks.as_ref().map(|s| s.len()).unwrap_or(0) >= 2
+        {
+            let subtasks = analysis.subtasks.unwrap();
+            let mut created_count = 0;
+
+            for (i, subtask) in subtasks.iter().enumerate() {
+                let layer = subtask.layer.as_ref().and_then(|l| match l.as_str() {
+                    "data" => Some(TaskLayer::Data),
+                    "backend" => Some(TaskLayer::Backend),
+                    "frontend" => Some(TaskLayer::Frontend),
+                    "fullstack" => Some(TaskLayer::Fullstack),
+                    "devops" => Some(TaskLayer::Devops),
+                    "testing" => Some(TaskLayer::Testing),
+                    _ => task.layer.clone(),
+                });
+
+                let create_data = CreateTask::subtask_of(
+                    task.project_id,
+                    subtask.title.clone(),
+                    Some(subtask.description.clone()),
+                    layer.or_else(|| task.layer.clone()),
+                    task.task_type.clone(),
+                    task.sequence.unwrap_or(0) * 10 + i as i32,
+                    task.testing_criteria.clone(),
+                    None,
+                    task.id,
+                );
+
+                Task::create(pool, &create_data, Uuid::new_v4()).await?;
+                created_count += 1;
+            }
+
+            // Cancel the original task
+            Task::update_status(pool, task.id, TaskStatus::Cancelled).await?;
+
+            // Log the replacement
+            AgentActivityLog::create(
+                pool,
+                project_id,
+                Some(task.id),
+                AgentAction::Replaced,
+                Some(format!(
+                    "Complex task (score {}) broken into {} subtasks: {}",
+                    analysis.complexity_score, created_count, analysis.reasoning
+                )),
+            )
+            .await?;
+
+            notification_service
+                .notify(
+                    "Task Breakdown",
+                    &format!(
+                        "Complex task '{}' split into {} subtasks",
+                        task.title, created_count
+                    ),
+                )
+                .await;
+
+            return Ok(Some(created_count));
+        }
+
+        Ok(None)
     }
 
     /// Auto-start an attempt for a task using default settings
@@ -410,6 +769,7 @@ impl AgentActivityService {
                 title: t.title.clone(),
                 description: t.description.clone(),
                 layer: t.layer.as_ref().map(|l| l.to_string()),
+                task_type: t.task_type.as_ref().map(|tt| tt.to_string()),
                 sequence: t.sequence,
             })
             .collect();
@@ -420,11 +780,26 @@ impl AgentActivityService {
         let prompt = format!(
             r#"You are a task prioritization assistant. Analyze the following tasks and select the ONE task that should be worked on next.
 
-## Prioritization Rules:
-1. Respect sequence order (lower sequence = higher priority)
-2. Respect layer dependencies: data → backend → frontend → fullstack → devops → testing
-3. Consider task descriptions for urgency indicators
-4. Prefer tasks that unblock other work
+## CRITICAL: Prioritization Rules (in strict order):
+1. **INITIALIZATION FIRST**: Tasks that initialize or set up the project MUST come first. Look for:
+   - Tasks with sequence=1 (highest priority)
+   - Architecture tasks that set up project structure, configs, or scaffolding
+   - Tasks with titles containing: "init", "setup", "scaffold", "configure", "create project", "initialize"
+   - The project must be runnable in the browser after these tasks complete!
+
+2. **Sequence order**: Lower sequence number = higher priority (sequence 1 before 2, 2 before 3, etc.)
+
+3. **Task type order**: architecture → mock → implementation → integration
+   - Architecture tasks set up structure (do these early)
+   - Mock tasks enable parallel development
+   - Implementation tasks build features
+   - Integration tasks come last (they wire everything together)
+
+4. **Layer dependencies**: data → backend → frontend → fullstack
+   - Data layer should be set up before backend
+   - Backend before frontend (frontend needs API endpoints)
+
+5. **Unblocking**: Prefer tasks that enable other tasks to proceed
 
 ## Tasks:
 {tasks_json}
@@ -438,7 +813,7 @@ Return ONLY valid JSON:
         );
 
         let system = Some(
-            "You are a task prioritization assistant. Select the most appropriate task to work on next based on dependencies and priority. Output valid JSON only.".to_string(),
+            "You are a task prioritization assistant. Your PRIMARY goal is ensuring the codebase is always runnable. Initialization and setup tasks MUST be completed first. Select the most appropriate task based on strict priority order. Output valid JSON only.".to_string(),
         );
 
         let response: TaskSelectionResponse = claude.ask_json(&prompt, system).await?;

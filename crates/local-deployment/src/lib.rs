@@ -22,6 +22,7 @@ use services::services::{
     remote_client::{RemoteClient, RemoteClientError},
     repo::RepoService,
     review_automation::ReviewAutomationService,
+    task_timeout::TaskTimeoutService,
     worktree_manager::WorktreeManager,
 };
 use tokio::sync::RwLock;
@@ -294,6 +295,13 @@ impl Deployment for LocalDeployment {
         let notification_service = self.container.notification_service().clone();
 
         ReviewAutomationService::spawn(db, git_service, notification_service).await
+    }
+
+    async fn spawn_task_timeout_service(&self) -> tokio::task::JoinHandle<()> {
+        let db = self.db.clone();
+        let notification_service = self.container.notification_service().clone();
+
+        TaskTimeoutService::spawn(db, notification_service).await
     }
 }
 

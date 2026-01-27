@@ -162,6 +162,41 @@ pub trait ContainerService {
 
     /// Finalize task execution by updating status to InReview and sending notifications
     async fn finalize_task(&self, ctx: &ExecutionContext) {
+        // Validate database state if task involved database changes
+        if ctx.task.layer == Some(db::models::task::TaskLayer::Data)
+            || ctx.task.layer == Some(db::models::task::TaskLayer::Backend)
+            || ctx.task.layer == Some(db::models::task::TaskLayer::Fullstack)
+        {
+            use crate::services::database_validator::DatabaseValidator;
+            let validator = DatabaseValidator::new(self.db().pool.clone());
+
+            match validator.validate().await {
+                Ok(result) => {
+                    if !result.is_ok() {
+                        tracing::warn!(
+                            task_id = %ctx.task.id,
+                            warnings = ?result.warnings,
+                            "Database validation warnings for task: {}",
+                            result.summary()
+                        );
+                    } else {
+                        tracing::info!(
+                            task_id = %ctx.task.id,
+                            "Database validation passed: {}",
+                            result.summary()
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        task_id = %ctx.task.id,
+                        error = %e,
+                        "Database validation failed - this may indicate missing migrations"
+                    );
+                }
+            }
+        }
+
         if let Err(e) =
             Task::update_status(&self.db().pool, ctx.task.id, TaskStatus::InReview).await
         {

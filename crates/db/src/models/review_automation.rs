@@ -264,4 +264,20 @@ impl ReviewAutomationLog {
         .fetch_all(pool)
         .await
     }
+
+    /// Count the number of merge conflict attempts for a task
+    pub async fn count_merge_conflicts(
+        pool: &SqlitePool,
+        task_id: Uuid,
+    ) -> Result<i64, sqlx::Error> {
+        let result = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!: i64"
+            FROM review_automation_logs
+            WHERE task_id = $1 AND action = 'merge_conflict'"#,
+            task_id
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(result)
+    }
 }
