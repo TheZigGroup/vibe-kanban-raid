@@ -1,4 +1,5 @@
 import { TaskWithAttemptStatus, Workspace } from 'shared/types';
+import type { SpeakerConfidenceDialogProps } from '@/components/dialogs/tvw/SpeakerConfidenceDialog';
 
 // Extend nice-modal-react to provide type safety for modal arguments
 declare module '@ebay/nice-modal-react' {
@@ -8,6 +9,7 @@ declare module '@ebay/nice-modal-react' {
       task: TaskWithAttemptStatus;
       projectId: string;
     };
+    'speaker-confidence': SpeakerConfidenceDialogProps;
   }
 }
 

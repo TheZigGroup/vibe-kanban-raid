@@ -283,10 +283,17 @@ fn extract_json(text: &str) -> &str {
 
     // Try to find JSON in code blocks
     if let Some(start) = text.find("```json") {
-        let content_start = start + 7;
+        let after_marker = start + 7; // Position after "```json"
+        // Skip past the newline after ```json
+        let content_start = text[after_marker..]
+            .find('\n')
+            .map(|i| after_marker + i + 1)
+            .unwrap_or(after_marker);
         if let Some(end) = text[content_start..].find("```") {
             return text[content_start..content_start + end].trim();
         }
+        // No closing ```, return content from start (truncated response)
+        return text[content_start..].trim();
     }
 
     // Try generic code block
@@ -300,6 +307,8 @@ fn extract_json(text: &str) -> &str {
         if let Some(end) = text[content_start..].find("```") {
             return text[content_start..content_start + end].trim();
         }
+        // No closing ```, return content from start (truncated response)
+        return text[content_start..].trim();
     }
 
     // Return as-is if no code block found

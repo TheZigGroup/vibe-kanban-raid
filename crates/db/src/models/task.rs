@@ -57,6 +57,8 @@ pub enum TaskLayer {
 pub enum TaskType {
     /// Architecture tasks: data models, API contracts, schemas
     Architecture,
+    /// Mock tasks: mock implementations for testing
+    Mock,
     /// Implementation tasks: actual feature implementation
     #[default]
     Implementation,

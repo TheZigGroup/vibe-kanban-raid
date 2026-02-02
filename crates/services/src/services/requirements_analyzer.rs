@@ -279,16 +279,32 @@ Return ONLY valid JSON with this structure:
     }
 
     /// Phase 2: Generate implementation tasks from features using mock-first, architecture-first approach
+    /// Processes features in batches to avoid response truncation for large requirements
     async fn generate_tasks_from_features(
         &self,
         project_id: Uuid,
         features: &[ExtractedFeature],
     ) -> Result<usize, RequirementsAnalyzerError> {
-        // Generate all tasks at once using the architecture-first approach
-        let tasks = self.generate_architecture_first_tasks(features).await?;
+        const MAX_FEATURES_PER_BATCH: usize = 5;
 
         let mut total_tasks = 0;
-        for task in tasks {
+        let mut all_tasks = Vec::new();
+
+        // Process features in batches to avoid response truncation
+        for (batch_idx, batch) in features.chunks(MAX_FEATURES_PER_BATCH).enumerate() {
+            info!(
+                batch = batch_idx + 1,
+                batch_size = batch.len(),
+                total_features = features.len(),
+                "Generating tasks for feature batch"
+            );
+
+            let tasks = self.generate_architecture_first_tasks(batch).await?;
+            all_tasks.extend(tasks);
+        }
+
+        // Create all tasks in the database
+        for task in all_tasks {
             let layer = task.layer.and_then(|l| parse_layer(&l));
             let task_type = task.task_type.and_then(|t| parse_task_type(&t));
 
@@ -393,26 +409,16 @@ Return ONLY valid JSON:
 ```
 
 ## post_task_actions Format
-MUST be markdown text that will be appended to .progress file. Include:
-- Task title as heading
-- Status with timestamp
-- Summary of what was done
-- List of files changed
-- Testing results
-- Separator line
+Brief markdown for .progress file: task heading, status, 1-2 sentence summary, files changed. Keep under 200 chars.
 
 IMPORTANT:
+- BE CONCISE - keep descriptions and post_task_actions short
 - Analyze the EXISTING project structure before generating tasks
-- Reference specific existing files that need modification in files_to_modify
-- FOLLOW THE ARCHITECTURE RULES STRICTLY - do not recreate components that already exist
-- For frontend tasks: DO NOT create new navbar/sidebar, use existing layout components
-- For backend tasks: Follow the routing, service, and model patterns
-- For database tasks: ALWAYS create migration files, run pnpm run prepare-db, never use npm run init-db
-- Database must exist before migrations run - include database creation check in architecture tasks
-- post_task_actions should be actual markdown text, not a template with placeholders
-- This markdown will be appended to .progress file when task completes
-- Include a "Rules Followed" section in post_task_actions listing which architecture rules were applied
-- Include a "Database Changes" section if migrations were created
+- Reference specific existing files in files_to_modify
+- FOLLOW THE ARCHITECTURE RULES STRICTLY
+- For frontend: use existing layout components
+- For backend: follow routing/service/model patterns
+- For database: create migration files, run pnpm run prepare-db
 "#,
             rules,
             features_json
@@ -426,7 +432,7 @@ IMPORTANT:
                 .to_string(),
         );
 
-        let response: TaskGenerationResponse = self.claude.ask_json_with_max_tokens(&prompt, system, 8192).await?;
+        let response: TaskGenerationResponse = self.claude.ask_json_with_max_tokens(&prompt, system, 16384).await?;
         Ok(response.tasks)
     }
 
@@ -472,6 +478,7 @@ fn parse_layer(s: &str) -> Option<TaskLayer> {
 fn parse_task_type(s: &str) -> Option<TaskType> {
     match s.to_lowercase().as_str() {
         "architecture" => Some(TaskType::Architecture),
+        "mock" => Some(TaskType::Mock),
         "implementation" => Some(TaskType::Implementation),
         "integration" => Some(TaskType::Integration),
         _ => None,
@@ -481,11 +488,13 @@ fn parse_task_type(s: &str) -> Option<TaskType> {
 /// Calculate sequence number based on task type to ensure proper ordering.
 /// Sequence ranges:
 /// - Architecture: 0-99
+/// - Mock: 50-99
 /// - Implementation: 100-899
 /// - Integration: 900+
 fn calculate_sequence(task_type: &Option<TaskType>, task_index: usize) -> i32 {
     let base = match task_type {
         Some(TaskType::Architecture) => 0,
+        Some(TaskType::Mock) => 50,
         Some(TaskType::Implementation) => 100,
         Some(TaskType::Integration) => 900,
         None => 100, // Default to implementation range

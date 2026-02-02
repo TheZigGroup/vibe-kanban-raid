@@ -44,7 +44,7 @@ export type TaskSource = "manual" | "ai_generated";
 
 export type TaskLayer = "data" | "backend" | "frontend" | "fullstack" | "devops" | "testing";
 
-export type TaskType = "architecture" | "implementation" | "integration";
+export type TaskType = "architecture" | "mock" | "implementation" | "integration";
 
 export type Task = { id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, source: TaskSource, layer: TaskLayer | null, task_type: TaskType | null, sequence: number | null, testing_criteria: string | null, stage_started_at: string | null, complexity_score: number | null, parent_task_id: string | null, prevent_breakdown: boolean, post_task_actions: string | null, created_at: string, updated_at: string, };
 

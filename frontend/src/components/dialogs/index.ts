@@ -104,6 +104,13 @@ export {
   type DeleteConfigurationResult,
 } from './settings/DeleteConfigurationDialog';
 
+// TVW (Transcript Video Widget) dialogs
+export {
+  SpeakerConfidenceDialog,
+  type SpeakerConfidenceDialogProps,
+  type SpeakerCorrectionResult,
+} from './tvw/SpeakerConfidenceDialog';
+
 // Shared/Generic dialogs
 export { ConfirmDialog, type ConfirmDialogProps } from './shared/ConfirmDialog';
 export {
